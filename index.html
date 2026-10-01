@@ -207,7 +207,7 @@ button{cursor:pointer}
         <div class="date" id="today-date"></div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-        <span class="chip" id="admin-chip" hidden>ผู้ดูแล</span>
+        <span class="chip" id="admin-chip" hidden>ลิงก์ B</span>
         <span class="chip" id="leave-chip" hidden></span>
         <span class="chip" id="mode-chip" hidden><span class="dot"></span>โหมดทดสอบ</span>
       </div>
@@ -222,7 +222,7 @@ button{cursor:pointer}
         </div>
       </div>
       <div class="map" id="map-home"></div>
-      <div class="pin-bar">
+      <div class="pin-bar admin-only">
         <button type="button" class="btn sm" id="pin-toggle">ปักหมุดเอง</button>
         <span class="note" id="pin-note"></span>
       </div>
@@ -469,8 +469,10 @@ let pendingDeletes = store.get('ci.pendingDeletes', []);
 let leaves = store.get('ci.leaves', []);                 // { id, type, from, to, days[], note, createdAt, synced }
 let pendingLeaveDeletes = store.get('ci.pendingLeaveDeletes', []);
 
-// ลิงก์ผู้ดูแล: เปิดด้วย ?admin  (แก้จุดทำงาน/รัศมี อัปโหลดรูปจากเครื่อง โหมดทดสอบ การเชื่อม Sheet)
-const IS_ADMIN = new URLSearchParams(location.search).has('admin');
+// ลิงก์ A (ปกติ): GPS จริงเท่านั้น เช็คอินได้เฉพาะในรัศมีจุดที่กำหนด ถ่ายสดเท่านั้น
+// ลิงก์ B (?b): ปักหมุดเอง อัปโหลดรูป เช็คอินได้ทุกที่ แก้จุดทำงาน ตั้งค่า Sheet และโหมดทดสอบ
+const IS_ADMIN = (p => p.has('b') || p.has('admin'))(new URLSearchParams(location.search));
+const LINK = IS_ADMIN ? 'B' : 'A';
 const demoOn = () => IS_ADMIN && settings.demo;
 
 let pos = null;          // {lat,lng,acc,ts,mock}
@@ -571,6 +573,7 @@ function placePin(ll) {
   setPos({ lat: ll.lat, lng: ll.lng, acc: 0, ts: Date.now(), mock: demoOn(), manual: manualPin });
 }
 function setManualPin(on) {
+  if (!IS_ADMIN) on = false;
   manualPin = on;
   $('#pin-toggle').textContent = on ? 'ใช้ตำแหน่ง GPS' : 'ปักหมุดเอง';
   $('#pin-toggle').classList.toggle('primary', on);
@@ -655,16 +658,21 @@ function renderStatus() {
     ico.innerHTML = ICON.wait; title.textContent = 'กำลังหาตำแหน่ง…';
     sub.textContent = 'อนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม'; hint = 'รอสัญญาณตำแหน่งก่อนถ่ายรูป';
   } else {
-    canGo = true;
+    const inSite = !!(evalRes && evalRes.inRange);
+    canGo = inSite || IS_ADMIN;   // ลิงก์ A ต้องอยู่ในรัศมีของจุดที่กำหนด
     title.textContent = currentPlace();
-    if (evalRes && evalRes.inRange) {
+    if (inSite) {
       card.classList.add('ok'); ico.innerHTML = ICON.ok;
-      sub.textContent = 'อยู่ในจุดที่บันทึกไว้';
+      sub.textContent = 'อยู่ในจุดที่กำหนด';
+    } else if (!IS_ADMIN) {
+      card.classList.add('warn'); ico.innerHTML = ICON.warn;
+      sub.textContent = evalRes ? `อยู่นอกจุดที่กำหนด · ห่างจาก ${evalRes.site.name} ${fmtDist(evalRes.dist)}` : 'ยังไม่มีจุดที่กำหนด';
     } else {
       ico.innerHTML = ICON.pin;
       sub.textContent = addrPending && !addr ? 'กำลังหาชื่อสถานที่…' : 'ตำแหน่งปัจจุบัน';
     }
-    hint = pos.acc > 100 ? `สัญญาณ GPS คลาดเคลื่อน ±${pos.acc} ม. ลองรอสักครู่ให้แม่นยำขึ้น` : 'ระบบจะบันทึกรูป เวลา และสถานที่';
+    hint = !canGo ? 'เข้าไปในรัศมีของจุดที่กำหนดเพื่อเช็คอิน'
+      : pos.acc > 100 ? `สัญญาณ GPS คลาดเคลื่อน ±${pos.acc} ม. ลองรอสักครู่ให้แม่นยำขึ้น` : 'ระบบจะบันทึกรูป เวลา และสถานที่';
   }
   $('#m-dist-lbl').textContent = evalRes ? (evalRes.inRange ? 'ห่างจากจุด' : 'จุดใกล้สุด') : 'จุดใกล้สุด';
   $('#m-dist').textContent = evalRes ? fmtDist(evalRes.dist) : '–';
@@ -719,6 +727,7 @@ let stream = null, shotData = null, shotMeta = null;
 
 async function openCamera() {
   if (!pos) return;
+  if (!IS_ADMIN && !(evalRes && evalRes.inRange)) return;   // ลิงก์ A: เฉพาะในรัศมีจุดที่กำหนด
   $('#cam').hidden = false; document.body.style.overflow = 'hidden';
   liveMode();
   $('#cam-tag').textContent = `เช็คอิน · ${currentPlace()}`;
@@ -793,7 +802,7 @@ function showPreview() {
   $('#cam-note').value = '';
 }
 
-// ผู้ดูแล: ใช้รูปจากเครื่องแทนการถ่ายสด (ครอปเป็น 3:4 ไม่ใส่ลายน้ำ)
+// ลิงก์ B: ใช้รูปจากเครื่องแทนการถ่ายสด (ครอปเป็น 3:4 ไม่ใส่ลายน้ำ)
 function useUploadedPhoto(file) {
   if (!IS_ADMIN || !file) return;
   const url = URL.createObjectURL(file), img = new Image();
@@ -827,7 +836,7 @@ function confirmShot() {
     lat: shotMeta.pos.lat, lng: shotMeta.pos.lng, acc: shotMeta.pos.acc, mock: !!shotMeta.pos.mock,
     siteId: shotMeta.site ? shotMeta.site.id : '', siteName: shotMeta.site ? shotMeta.site.name : '',
     dist: shotMeta.dist == null ? null : Math.round(shotMeta.dist), inRange: shotMeta.inRange,
-    note, photo: shotData, source: shotMeta.source, name: profile.name, empId: profile.empId, ua: navigator.userAgent
+    note, photo: shotData, source: shotMeta.source, link: LINK, name: profile.name, empId: profile.empId, ua: navigator.userAgent
   };
   records.push(r);
   const saved = store.set('ci.records', records);
@@ -879,7 +888,7 @@ function sheetRow(r) {
   return {
     id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : r.type === 'out' ? 'ออกงาน' : 'เช็คอิน',
     name: r.name || '', empId: r.empId || '', site: placeOf(r), dist: r.dist ?? '', inRange: r.inRange ? 'ใช่' : 'ไม่',
-    lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '',
+    lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '', link: r.link || 'A',
     editedAt: r.editedAt ? `${dayKey(new Date(r.editedAt))} ${hms(new Date(r.editedAt))}` : '',
     origTime: r.origTs ? `${dayKey(new Date(r.origTs))} ${hms(new Date(r.origTs))}` : ''
   };
