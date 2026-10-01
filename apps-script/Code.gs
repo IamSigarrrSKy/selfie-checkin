@@ -341,7 +341,7 @@ function buildRegion(ss, name) {
   const cols = ['B', 'C', 'D', 'G', 'H', 'I', 'M', 'T'].map(c => L + c + '2:' + c).join(',');
   sh.getRange('A6').setFormula('=IFERROR(LET(f,FILTER({' + cols + '},' + real + '),s,SORT(f,1,FALSE,2,FALSE),' +
     'HSTACK(CHOOSECOLS(s,1,2,3,4,5,6,7),' +
-    'MAP(CHOOSECOLS(s,8),LAMBDA(u,IF(u="","",HYPERLINK(u,"ดูรูป"))))),"ยังไม่มีรายการ")');
+    'MAP(CHOOSECOLS(s,8),LAMBDA(u,IF(u="","",HYPERLINK(u,"ดูรูป")))))),"ยังไม่มีรายการ")');
 
   const rows = sh.getMaxRows() - 5;
   sh.getRange(6, 1, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
