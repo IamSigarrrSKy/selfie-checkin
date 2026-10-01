@@ -90,10 +90,19 @@ function doPost(e) {
   }
 }
 
-// วันที่ "2026-10-01" และเวลา "08:30:00" ถูกเขียนเป็นข้อความ แล้ว Sheet แปลงเป็นวันที่/เวลาจริงให้เอง
+// วันที่ "2026-10-01" และเวลา "08:30:00" แปลงเป็นตัวเลขวันที่/เวลาของ Sheet เอง ไม่พึ่งการแปลงอัตโนมัติ
+function dateSerial(s) {
+  const m = String(s).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  return m ? (Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 86400000 : s;
+}
+function timeSerial(s) {
+  const m = String(s).match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  return m ? (+m[1] * 3600 + +m[2] * 60 + +(m[3] || 0)) / 86400 : s;
+}
+
 function toRow(r, photoUrl, created) {
   const photo = photoUrl ? '=HYPERLINK("' + photoUrl + '","ดูรูป")' : '';
-  return [r.id, r.date, r.time, r.type, r.name, r.empId, r.site, r.dist, r.inRange,
+  return [r.id, dateSerial(r.date), timeSerial(r.time), r.type, r.name, r.empId, r.site, r.dist, r.inRange,
     r.lat, r.lng, r.acc, r.note, photo, r.mock, created, "", "",   // ไม่บันทึกประวัติการแก้ไขลง Sheet
     regionOf(r.site), photoUrl || '', r.source || 'กล้อง'];
 }
@@ -201,6 +210,12 @@ function buildLog(ss) {
       const m = String(photoF[i][0]).match(/HYPERLINK\("([^"]+)"/i);
       return [v[0] || (m ? m[1] : '')];
     }));
+    // วันที่/เวลาที่ค้างเป็นข้อความ: แปลงเป็นตัวเลข
+    const dt = sh.getRange(2, 2, last - 1, 2).getValues();
+    dt.forEach((v, i) => {
+      if (typeof v[0] === 'string' && v[0]) sh.getRange(i + 2, 2).setValue(dateSerial(v[0].trim()));
+      if (typeof v[1] === 'string' && v[1]) sh.getRange(i + 2, 3).setValue(timeSerial(v[1].trim()));
+    });
   }
 
   const rows = sh.getMaxRows() - 1;
