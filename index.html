@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e5a52">
+<title>ลงเวลาเซลฟี่</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: แอปมือถือคอลัมน์เดียว — การ์ดสถานะตำแหน่ง > แผนที่ > ปุ่มหลัก > สรุปวันนี้, แถบนำทางล่าง */
+:root{
+  --bg:#f3f6f4; --surface:#ffffff; --surface-2:#e8efec; --line:#d5e0db;
+  --fg:#14211e; --muted:#5b6d68;
+  --accent:#0e5a52; --accent-fg:#ffffff; --accent-soft:#d6ebe6;
+  --ok:#1d7a46; --ok-soft:#dcf1e3; --warn:#a15c00; --warn-soft:#fbecd3; --bad:#b4282f; --bad-soft:#fadcdd;
+  --shadow:0 1px 2px rgba(14,40,36,.06),0 6px 20px rgba(14,40,36,.06);
+  --font:"IBM Plex Sans Thai",system-ui,"Leelawadee UI","Tahoma",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:16px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1513; --surface:#15201d; --surface-2:#1c2a26; --line:#2a3b36;
+  --fg:#e5efec; --muted:#93a7a1;
+  --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34;
+  --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c; --bad-soft:#3d1c1e;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0d1513; --surface:#15201d; --surface-2:#1c2a26; --line:#2a3b36;
+  --fg:#e5efec; --muted:#93a7a1;
+  --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34;
+  --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c; --bad-soft:#3d1c1e;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(96px + env(safe-area-inset-bottom,0px))}
+.page{display:flex;flex-direction:column;gap:14px}
+
+/* header */
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.hello{color:var(--muted);font-size:14px}
+.hello b{color:var(--fg);font-weight:600}
+.clock{font-family:var(--mono);font-size:40px;font-weight:600;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.clock small{font-size:18px;color:var(--muted);margin-left:2px}
+.date{color:var(--muted);font-size:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:600;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+/* status + map card */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.loc{overflow:hidden}
+.loc-head{display:flex;gap:12px;align-items:center;padding:14px 16px}
+.loc-ico{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2);color:var(--muted)}
+.loc-ico svg{width:22px;height:22px}
+.loc.ok .loc-ico{background:var(--ok-soft);color:var(--ok)}
+.loc.warn .loc-ico{background:var(--warn-soft);color:var(--warn)}
+.loc.bad .loc-ico{background:var(--bad-soft);color:var(--bad)}
+.loc-text{min-width:0;flex:1}
+.loc-title{font-weight:600;line-height:1.35}
+.loc-sub{color:var(--muted);font-size:13px}
+.map{isolation:isolate;height:230px;background:var(--surface-2);border-top:1px solid var(--line)}
+.loc-meta{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line)}
+.loc-meta>div{padding:10px 12px;min-width:0}
+.loc-meta>div+div{border-left:1px solid var(--line)}
+.lbl{font-size:11.5px;color:var(--muted);letter-spacing:.02em}
+.val{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* main action */
+.cta{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:0;border-radius:var(--r);padding:18px;font-size:18px;font-weight:700;background:var(--accent);color:var(--accent-fg);box-shadow:0 8px 24px -10px var(--accent);transition:transform .12s}
+.cta:active{transform:scale(.985)}
+.cta svg{width:24px;height:24px}
+.cta.out{background:var(--fg);color:var(--bg);box-shadow:none}
+.cta:disabled{opacity:.5;cursor:not-allowed}
+.hint{font-size:13px;color:var(--muted);text-align:center;margin-top:-4px}
+
+.today{display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:4px 0}
+.today>div{padding:10px 14px;min-width:0}
+.today>div+div{border-left:1px solid var(--line)}
+.today .val{font-family:var(--mono);font-size:18px}
+.sec-title{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.03em;display:flex;justify-content:space-between;align-items:center}
+
+/* list */
+.list{display:flex;flex-direction:column}
+.row{display:flex;gap:12px;align-items:center;padding:12px 14px;border:0;background:none;width:100%;text-align:left}
+.row+.row{border-top:1px solid var(--line)}
+.thumb{flex:none;width:52px;height:52px;border-radius:12px;object-fit:cover;background:var(--surface-2)}
+.row-main{flex:1;min-width:0}
+.row-title{font-weight:600;display:flex;gap:8px;align-items:center}
+.row-sub{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-time{font-family:var(--mono);font-weight:600;font-size:15px}
+.day-h{padding:10px 14px 4px;font-size:12.5px;color:var(--muted);font-weight:600}
+.empty{padding:28px 18px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--fg);margin-bottom:4px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 14px;font-weight:600;font-size:14px}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.btn.danger{color:var(--bad)}
+.btn.danger.armed{background:var(--bad);color:#fff;border-color:transparent}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:10px}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.seg{display:inline-flex;align-self:flex-start;background:var(--surface-2);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--surface);color:var(--fg);box-shadow:var(--shadow)}
+
+/* forms */
+.form{display:flex;flex-direction:column;gap:12px;padding:16px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label{font-size:13px;font-weight:600;color:var(--muted)}
+.input{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px}
+.input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.switch{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px}
+.switch+.switch{border-top:1px solid var(--line)}
+.switch input{width:44px;height:26px;accent-color:var(--accent)}
+.note{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:500;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}
+.nav-in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.nav button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:12px;font-weight:600;color:var(--muted);border-radius:10px}
+.nav button svg{width:22px;height:22px}
+.nav button.on{color:var(--accent)}
+
+/* camera sheet */
+.sheet{position:fixed;inset:0;z-index:1100;background:#071210;color:#fff;display:flex;flex-direction:column}
+.sheet-top{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 10px}
+.sheet-top .x{border:0;background:rgba(255,255,255,.12);color:#fff;width:40px;height:40px;border-radius:50%;display:grid;place-items:center}
+.sheet-top .x svg{width:20px;height:20px}
+.sheet-tag{font-size:13px;background:rgba(255,255,255,.12);padding:6px 12px;border-radius:999px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stage{flex:1;position:relative;display:grid;place-items:center;overflow:hidden;padding:0 16px}
+.viewport{position:relative;width:min(100%,440px,calc((100dvh - 290px) * .75));aspect-ratio:3/4;border-radius:22px;overflow:hidden;background:#000}
+.viewport video,.viewport img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.viewport video{transform:scaleX(-1)}
+.guide{position:absolute;inset:0;pointer-events:none}
+.cam-msg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;font-size:14px;color:#d8e6e2}
+.sheet-bot{padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px;align-items:center}
+.shutter{width:76px;height:76px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.25);transition:transform .1s}
+.shutter:active{transform:scale(.92)}
+.shutter:disabled{opacity:.4}
+.sheet .input{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);color:#fff}
+.sheet .input::placeholder{color:#9fb5af}
+.confirm-wrap{width:100%;max-width:440px;display:flex;flex-direction:column;gap:10px}
+.sheet .btn{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff}
+.sheet .btn.primary{background:#5fc4b3;color:#06201c}
+.sheet .warnbox{background:rgba(240,179,90,.15);color:#f6c77f;border-radius:10px;padding:8px 12px;font-size:13px}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.flash.go{animation:flash .35s ease-out}
+@keyframes flash{0%{opacity:.85}100%{opacity:0}}
+
+/* detail sheet */
+.modal{position:fixed;inset:0;z-index:1100;background:rgba(5,15,13,.55);display:flex;align-items:flex-end;justify-content:center}
+.modal-card{background:var(--surface);width:100%;max-width:520px;max-height:92%;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
+.modal-card img{width:100%;border-radius:14px;display:block}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:1300;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+
+/* leaflet tweaks */
+.leaflet-container{font:inherit;background:var(--surface-2)}
+.me-pin{width:18px;height:18px;border-radius:50%;background:#2a6cf0;border:3px solid #fff;box-shadow:0 0 0 0 rgba(42,108,240,.5);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(42,108,240,.5)}100%{box-shadow:0 0 0 16px rgba(42,108,240,0)}}
+.site-pin{width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;border:2px solid var(--surface);box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.site-pin svg{width:16px;height:16px}
+@media (prefers-reduced-motion:reduce){.me-pin,.flash.go{animation:none}.cta{transition:none}}
+@media (max-width:380px){.clock{font-size:34px}.loc-meta .val{font-size:13px}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== ลงเวลา ===== -->
+  <section class="page" id="pg-home">
+    <div class="top">
+      <div>
+        <div class="hello" id="hello">สวัสดี</div>
+        <div class="clock" id="clock">--:--<small>:--</small></div>
+        <div class="date" id="today-date"></div>
+      </div>
+      <span class="chip" id="mode-chip" hidden><span class="dot"></span>โหมดทดสอบ</span>
+    </div>
+
+    <div class="card loc" id="loc-card">
+      <div class="loc-head">
+        <div class="loc-ico" id="loc-ico"></div>
+        <div class="loc-text">
+          <div class="loc-title" id="loc-title">กำลังหาตำแหน่ง…</div>
+          <div class="loc-sub" id="loc-sub">อนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม</div>
+        </div>
+      </div>
+      <div class="map" id="map-home"></div>
+      <div class="loc-meta">
+        <div><div class="lbl">ระยะจากจุด</div><div class="val num" id="m-dist">–</div></div>
+        <div><div class="lbl">รัศมีที่อนุญาต</div><div class="val num" id="m-rad">–</div></div>
+        <div><div class="lbl">ความแม่นยำ GPS</div><div class="val num" id="m-acc">–</div></div>
+      </div>
+    </div>
+
+    <button class="cta" id="cta" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      <span id="cta-label">ถ่ายเซลฟี่ เข้างาน</span>
+    </button>
+    <div class="hint" id="cta-hint">รอสัญญาณตำแหน่งก่อนถ่ายรูป</div>
+
+    <div class="sec-title">วันนี้</div>
+    <div class="card today">
+      <div><div class="lbl">เข้างาน</div><div class="val" id="t-in">–</div></div>
+      <div><div class="lbl">ออกงาน</div><div class="val" id="t-out">–</div></div>
+      <div><div class="lbl">รวมเวลา</div><div class="val" id="t-dur">–</div></div>
+    </div>
+    <div class="card list" id="today-list"></div>
+  </section>
+
+  <!-- ===== ประวัติ ===== -->
+  <section class="page" id="pg-history" hidden>
+    <div class="top">
+      <div><div class="clock" style="font-family:var(--font);font-size:26px">ประวัติการลงเวลา</div>
+      <div class="date" id="hist-count"></div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <div class="seg" id="hist-filter">
+        <button data-f="all" class="on">ทั้งหมด</button>
+        <button data-f="out">นอกพื้นที่</button>
+        <button data-f="month">เดือนนี้</button>
+      </div>
+      <button class="btn sm" id="export-csv">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
+        ส่งออก CSV
+      </button>
+    </div>
+    <div class="card list" id="hist-list"></div>
+  </section>
+
+  <!-- ===== จุดทำงาน ===== -->
+  <section class="page" id="pg-sites" hidden>
+    <div class="top">
+      <div><div class="clock" style="font-family:var(--font);font-size:26px">จุดทำงาน</div>
+      <div class="date">ลงเวลาได้เมื่ออยู่ในรัศมีของจุดใดจุดหนึ่ง</div></div>
+    </div>
+    <div class="card" style="overflow:hidden">
+      <div class="map" id="map-sites" style="height:260px;border-top:0"></div>
+      <div class="list" id="site-list"></div>
+    </div>
+    <div class="sec-title"><span id="site-form-title">เพิ่มจุดทำงาน</span></div>
+    <form class="card form" id="site-form" autocomplete="off">
+      <div class="note">แตะบนแผนที่ด้านบนเพื่อปักหมุด หรือกด “ใช้ตำแหน่งปัจจุบัน” เมื่อยืนอยู่ที่จุดนั้น</div>
+      <div class="field"><label for="sf-name">ชื่อจุด</label><input class="input" id="sf-name" required placeholder="เช่น อุทยานวิทยาศาสตร์ ม.ขอนแก่น"></div>
+      <div class="grid2">
+        <div class="field"><label for="sf-lat">ละติจูด</label><input class="input num" id="sf-lat" required inputmode="decimal" placeholder="16.4559"></div>
+        <div class="field"><label for="sf-lng">ลองจิจูด</label><input class="input num" id="sf-lng" required inputmode="decimal" placeholder="102.8194"></div>
+      </div>
+      <div class="field">
+        <label for="sf-rad">รัศมีที่อนุญาต: <span class="num" id="sf-rad-v">300</span> ม.</label>
+        <input type="range" id="sf-rad" min="50" max="2000" step="50" value="300" style="accent-color:var(--accent)">
+      </div>
+      <div class="btns">
+        <button type="button" class="btn" id="sf-here">ใช้ตำแหน่งปัจจุบัน</button>
+        <span style="flex:1"></span>
+        <button type="button" class="btn" id="sf-cancel" hidden>ยกเลิก</button>
+        <button type="submit" class="btn primary" id="sf-save">บันทึกจุด</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ===== ตั้งค่า ===== -->
+  <section class="page" id="pg-settings" hidden>
+    <div class="top"><div><div class="clock" style="font-family:var(--font);font-size:26px">ตั้งค่า</div></div></div>
+    <div class="sec-title">ข้อมูลผู้ลงเวลา</div>
+    <form class="card form" id="profile-form" autocomplete="off">
+      <div class="field"><label for="pf-name">ชื่อ–นามสกุล</label><input class="input" id="pf-name" placeholder="ชื่อที่จะพิมพ์ลงบนรูป"></div>
+      <div class="grid2">
+        <div class="field"><label for="pf-id">รหัสพนักงาน</label><input class="input num" id="pf-id" placeholder="EMP-0001"></div>
+        <div class="field"><label for="pf-dept">หน่วยงาน</label><input class="input" id="pf-dept" placeholder="ส่วนกลาง"></div>
+      </div>
+      <div class="btns"><span style="flex:1"></span><button class="btn primary" type="submit">บันทึก</button></div>
+    </form>
+
+    <div class="sec-title">การทำงาน</div>
+    <div class="card">
+      <label class="switch" for="set-demo">
+        <div><b>โหมดทดสอบ</b><div class="note">ใช้ตำแหน่งจำลอง แตะแผนที่หน้าลงเวลาเพื่อย้ายตำแหน่ง รายการที่บันทึกจะถูกติดป้าย “ทดสอบ”</div></div>
+        <input type="checkbox" id="set-demo">
+      </label>
+      <label class="switch" for="set-allow-out">
+        <div><b>อนุญาตลงเวลานอกพื้นที่</b><div class="note">รายการจะถูกทำเครื่องหมาย “นอกพื้นที่” ใส่หมายเหตุได้ถ้าต้องการ</div></div>
+        <input type="checkbox" id="set-allow-out" checked>
+      </label>
+    </div>
+
+    <div class="sec-title">Google Sheet</div>
+    <form class="card form" id="sheet-form" autocomplete="off">
+      <div class="note">วาง URL ของ Apps Script ที่ Deploy แล้ว (ลงท้ายด้วย <span class="num">/exec</span>) ทุกการลงเวลาจะส่งเข้า Sheet พร้อมเก็บรูปใน Google Drive</div>
+      <div class="field"><label for="gs-url">Apps Script URL</label><input class="input num" id="gs-url" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      <div class="field"><label for="gs-token">รหัสลับ (ให้ตรงกับ TOKEN ในสคริปต์)</label><input class="input" id="gs-token" placeholder="เว้นว่างได้"></div>
+      <div class="note" id="sync-note"></div>
+      <div class="btns">
+        <button type="button" class="btn" id="gs-test">ทดสอบการเชื่อมต่อ</button>
+        <button type="button" class="btn" id="gs-sync">ส่งข้อมูลที่ค้าง</button>
+        <span style="flex:1"></span>
+        <button type="submit" class="btn primary">บันทึก</button>
+      </div>
+    </form>
+
+    <div class="sec-title">ข้อมูลในเครื่อง</div>
+    <div class="card form">
+      <div class="note" id="storage-note"></div>
+      <div class="btns"><button class="btn danger" id="clear-data">ล้างประวัติการลงเวลา</button></div>
+    </div>
+  </section>
+</div>
+
+<!-- bottom nav -->
+<nav class="nav">
+  <div class="nav-in">
+    <button data-pg="home" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>ลงเวลา</button>
+    <button data-pg="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>ประวัติ</button>
+    <button data-pg="sites"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>จุดทำงาน</button>
+    <button data-pg="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>ตั้งค่า</button>
+  </div>
+</nav>
+
+<!-- camera sheet -->
+<div class="sheet" id="cam" hidden>
+  <div class="sheet-top">
+    <button class="x" id="cam-close" aria-label="ปิดกล้อง"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <div class="sheet-tag" id="cam-tag"></div>
+    <span style="width:40px"></span>
+  </div>
+  <div class="stage">
+    <div class="viewport" id="viewport">
+      <video id="video" playsinline muted autoplay></video>
+      <img id="shot" alt="รูปเซลฟี่ที่ถ่าย" hidden>
+      <svg class="guide" id="guide" viewBox="0 0 300 400" preserveAspectRatio="none">
+        <defs><mask id="m"><rect width="300" height="400" fill="#fff"/><ellipse cx="150" cy="175" rx="92" ry="122" fill="#000"/></mask></defs>
+        <rect width="300" height="400" fill="rgba(4,14,12,.45)" mask="url(#m)"/>
+        <ellipse cx="150" cy="175" rx="92" ry="122" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="6 6" opacity=".85"/>
+      </svg>
+      <div class="cam-msg" id="cam-msg" hidden></div>
+      <div class="flash" id="flash"></div>
+    </div>
+  </div>
+  <div class="sheet-bot">
+    <div id="live-ctl" style="display:flex;flex-direction:column;align-items:center;gap:8px">
+      <button class="shutter" id="shutter" aria-label="ถ่ายรูป" disabled></button>
+      <div style="font-size:13px;color:#b9cdc8">จัดใบหน้าให้อยู่ในกรอบ แล้วกดถ่าย</div>
+    </div>
+    <div class="confirm-wrap" id="confirm-ctl" hidden>
+      <div class="warnbox" id="out-warn" hidden>คุณอยู่นอกพื้นที่จุดทำงาน รายการจะถูกทำเครื่องหมาย “นอกพื้นที่”</div>
+      <textarea class="input" id="cam-note" rows="2" placeholder="หมายเหตุ (ถ้ามี) เช่น ประชุมนอกสถานที่"></textarea>
+      <div class="btns" style="justify-content:stretch">
+        <button class="btn" id="retake" style="flex:1">ถ่ายใหม่</button>
+        <button class="btn primary" id="confirm" style="flex:2">ยืนยันลงเวลา</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- record detail -->
+<div class="modal" id="detail" hidden>
+  <div class="modal-card" id="detail-card"></div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ---------- storage ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } }
+};
+
+// จุดทำงานต่างจังหวัด (พิกัดจาก OpenStreetMap ปรับได้ในแท็บ "จุดทำงาน")
+const DEFAULT_SITES = [
+  { id: 'cmu', name: 'อุทยานวิทยาศาสตร์และเทคโนโลยี ม.เชียงใหม่', lat: 18.76467, lng: 98.93700, radius: 300 },
+  { id: 'kku', name: 'อุทยานวิทยาศาสตร์ ม.ขอนแก่น', lat: 16.45588, lng: 102.81942, radius: 300 },
+  { id: 'psu', name: 'อุทยานวิทยาศาสตร์ ม.สงขลานครินทร์', lat: 7.02194, lng: 100.55542, radius: 300 },
+  { id: 'oap', name: 'ปส. ภาคตะวันออก (ศาลากลาง จ.ระยอง)', lat: 12.70726, lng: 101.18380, radius: 300 }
+];
+
+// ใส่ URL ของ Apps Script ไว้ตรงนี้ได้เลย หรือกรอกในหน้าตั้งค่าของแอป
+const SHEET_URL_DEFAULT = '';
+
+const canStore = (() => { try { localStorage.setItem('ci._t', '1'); localStorage.removeItem('ci._t'); return true; } catch { return false; } })();
+let sites    = store.get('ci.sites.v2', DEFAULT_SITES);
+let records  = store.get('ci.records', []);
+let profile  = store.get('ci.profile', { name: '', empId: '', dept: '' });
+let settings = Object.assign({ demo: false, allowOut: true, scriptUrl: SHEET_URL_DEFAULT, token: '' }, store.get('ci.settings', {}));
+let pendingDeletes = store.get('ci.pendingDeletes', []);
+
+let pos = null;          // {lat,lng,acc,ts,mock}
+let evalRes = null;      // {site, dist, inRange}
+let geoErr = null;
+let watchId = null;
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const hm  = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const hms = d => `${hm(d)}:${pad(d.getSeconds())}`;
+const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const thDate = new Intl.DateTimeFormat('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const thShort = new Intl.DateTimeFormat('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' });
+const fmtDist = m => m == null ? '–' : m < 1000 ? `${Math.round(m)} ม.` : `${(m / 1000).toFixed(m < 10000 ? 2 : 0)} กม.`;
+const fmtDur = ms => { const t = Math.max(0, Math.floor(ms / 60000)); return `${Math.floor(t / 60)} ชม. ${pad(t % 60)} น.`; };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function haversine(a, b) {
+  const R = 6371000, toR = x => x * Math.PI / 180;
+  const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+let toastT;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600);
+}
+
+const ICON = {
+  pin:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+  ok:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><path d="m9 9.5 2 2 4-4"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>',
+  wait: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  bld:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5l8-3 8 3v16M9 21v-5h6v5"/></svg>'
+};
+
+/* ---------- clock ---------- */
+function tick() {
+  const d = new Date();
+  $('#clock').innerHTML = `${hm(d)}<small>:${pad(d.getSeconds())}</small>`;
+  $('#today-date').textContent = thDate.format(d);
+}
+
+/* ---------- maps ---------- */
+const TILE = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const ATTR = '&copy; OpenStreetMap';
+const siteIcon = () => L.divIcon({ className: '', html: `<div class="site-pin">${ICON.bld}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+const meIcon = L.divIcon({ className: '', html: '<div class="me-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+
+let homeMap, homeSiteLayer, meMarker, accCircle, siteMap, siteLayer, draftMarker, draftCircle;
+
+function initHomeMap() {
+  homeMap = L.map('map-home', { zoomControl: false, attributionControl: true }).setView([13.2, 100.9], 5);
+  L.tileLayer(TILE, { maxZoom: 19, attribution: ATTR }).addTo(homeMap);
+  homeSiteLayer = L.layerGroup().addTo(homeMap);
+  homeMap.on('click', e => {
+    if (!settings.demo) return;
+    setPos({ lat: e.latlng.lat, lng: e.latlng.lng, acc: 12, ts: Date.now(), mock: true });
+  });
+  drawSites(homeSiteLayer);
+}
+
+function drawSites(layer) {
+  layer.clearLayers();
+  const c = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0e5a52';
+  sites.forEach(s => {
+    L.circle([s.lat, s.lng], { radius: s.radius, color: c, weight: 2, fillColor: c, fillOpacity: .12 }).addTo(layer);
+    L.marker([s.lat, s.lng], { icon: siteIcon() }).bindTooltip(esc(s.name)).addTo(layer);
+  });
+}
+
+let fittedOnce = false;
+function updateHomeMap() {
+  if (!homeMap || !pos) return;
+  const ll = [pos.lat, pos.lng];
+  if (!meMarker) {
+    meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000 }).addTo(homeMap);
+    accCircle = L.circle(ll, { radius: pos.acc, color: '#2a6cf0', weight: 1, fillOpacity: .08 }).addTo(homeMap);
+  } else { meMarker.setLatLng(ll); accCircle.setLatLng(ll).setRadius(pos.acc); }
+  if (!fittedOnce || pos.mock) {
+    fittedOnce = true;
+    if (evalRes && evalRes.dist < 20000) {
+      homeMap.fitBounds(L.latLngBounds([ll, [evalRes.site.lat, evalRes.site.lng]]).pad(.35), { maxZoom: 17 });
+    } else homeMap.setView(ll, 16);
+  }
+}
+
+/* ---------- location ---------- */
+function startGeo() {
+  if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  if (settings.demo) {
+    geoErr = null;
+    if (!pos || !pos.mock) { const s = sites[0] || DEFAULT_SITES[0]; setPos({ lat: s.lat + 0.0003, lng: s.lng + 0.0002, acc: 12, ts: Date.now(), mock: true }); }
+    return;
+  }
+  pos = null; evalRes = null; fittedOnce = false;
+  if (!('geolocation' in navigator)) { geoErr = 'อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง'; renderStatus(); return; }
+  geoErr = null; renderStatus();
+  watchId = navigator.geolocation.watchPosition(
+    p => { geoErr = null; setPos({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), ts: p.timestamp, mock: false }); },
+    e => {
+      geoErr = e.code === 1 ? 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง เปิดสิทธิ์ Location ในการตั้งค่าเบราว์เซอร์แล้วโหลดหน้าใหม่'
+             : e.code === 3 ? 'หาตำแหน่งไม่ทันเวลา ลองออกไปที่โล่งหรือเปิด GPS'
+             : 'หาตำแหน่งไม่สำเร็จ ตรวจสอบว่าเปิด GPS แล้ว';
+      renderStatus();
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+  );
+}
+
+function setPos(p) {
+  geoErr = null;
+  pos = p;
+  evalRes = null;
+  sites.forEach(s => {
+    const d = haversine(p, s);
+    if (!evalRes || d - s.radius < evalRes.dist - evalRes.site.radius) evalRes = { site: s, dist: d };
+  });
+  if (evalRes) evalRes.inRange = evalRes.dist <= evalRes.site.radius;
+  renderStatus(); updateHomeMap();
+}
+
+/* ---------- home rendering ---------- */
+function todayRecords() { const k = dayKey(new Date()); return records.filter(r => dayKey(new Date(r.ts)) === k).sort((a, b) => a.ts - b.ts); }
+function nextType() { const t = todayRecords(); return t.length && t[t.length - 1].type === 'in' ? 'out' : 'in'; }
+
+function renderStatus() {
+  const card = $('#loc-card'), ico = $('#loc-ico'), title = $('#loc-title'), sub = $('#loc-sub');
+  card.classList.remove('ok', 'warn', 'bad');
+  let canGo = false, hint = '';
+  if (geoErr) {
+    card.classList.add('bad'); ico.innerHTML = ICON.warn;
+    title.textContent = 'ระบุตำแหน่งไม่ได้'; sub.textContent = geoErr;
+    hint = 'ต้องมีตำแหน่งก่อนจึงลงเวลาได้';
+  } else if (!pos) {
+    ico.innerHTML = ICON.wait; title.textContent = 'กำลังหาตำแหน่ง…';
+    sub.textContent = 'อนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม'; hint = 'รอสัญญาณตำแหน่งก่อนถ่ายรูป';
+  } else if (!evalRes) {
+    card.classList.add('warn'); ico.innerHTML = ICON.warn;
+    title.textContent = 'ยังไม่มีจุดทำงาน'; sub.textContent = 'เพิ่มจุดทำงานในแท็บ “จุดทำงาน” ก่อน';
+    hint = 'ยังไม่ได้ตั้งค่าจุดทำงาน';
+  } else if (evalRes.inRange) {
+    card.classList.add('ok'); ico.innerHTML = ICON.ok;
+    title.textContent = evalRes.site.name; sub.textContent = 'อยู่ในพื้นที่ปฏิบัติงาน พร้อมลงเวลา';
+    canGo = true; hint = pos.acc > 100 ? `สัญญาณ GPS คลาดเคลื่อน ±${pos.acc} ม. ลองรอสักครู่ให้แม่นยำขึ้น` : 'ระบบจะบันทึกรูป เวลา และพิกัดเป็นหลักฐาน';
+  } else {
+    card.classList.add('warn'); ico.innerHTML = ICON.warn;
+    title.textContent = 'อยู่นอกพื้นที่ปฏิบัติงาน';
+    sub.textContent = `จุดที่ใกล้ที่สุด: ${evalRes.site.name}`;
+    canGo = settings.allowOut;
+    hint = settings.allowOut ? 'ลงเวลาได้ รายการจะถูกทำเครื่องหมาย “นอกพื้นที่”' : 'เข้าไปในรัศมีของจุดทำงานเพื่อลงเวลา';
+  }
+  $('#m-dist').textContent = evalRes ? fmtDist(evalRes.dist) : '–';
+  $('#m-rad').textContent  = evalRes ? `${evalRes.site.radius} ม.` : '–';
+  $('#m-acc').textContent  = pos ? `±${pos.acc} ม.` : '–';
+
+  const nt = nextType(), cta = $('#cta');
+  cta.disabled = !canGo;
+  cta.classList.toggle('out', nt === 'out');
+  $('#cta-label').textContent = nt === 'in' ? 'ถ่ายเซลฟี่ เข้างาน' : 'ถ่ายเซลฟี่ ออกงาน';
+  $('#cta-hint').textContent = hint;
+  $('#mode-chip').hidden = !settings.demo;
+  $('#mode-chip').className = 'chip warn';
+}
+
+function recordRow(r) {
+  const d = new Date(r.ts);
+  const badge = r.inRange ? '' : '<span class="chip warn">นอกพื้นที่</span>';
+  const mock = (r.mock ? '<span class="chip">ทดสอบ</span>' : '')
+    + (r.editedAt ? '<span class="chip">แก้ไข</span>' : '')
+    + (settings.scriptUrl && (!r.synced || r.dirty) ? '<span class="chip">รอส่ง</span>' : '');
+  return `<button class="row" data-id="${r.id}">
+    <img class="thumb" src="${r.photo}" alt="">
+    <div class="row-main">
+      <div class="row-title">${r.type === 'in' ? 'เข้างาน' : 'ออกงาน'} ${badge}${mock}</div>
+      <div class="row-sub">${esc(r.siteName)} · ${fmtDist(r.dist)}</div>
+    </div>
+    <div class="row-time">${hm(d)}</div>
+  </button>`;
+}
+
+function renderToday() {
+  const t = todayRecords();
+  const fin = t.find(r => r.type === 'in');
+  const lout = [...t].reverse().find(r => r.type === 'out');
+  $('#t-in').textContent  = fin ? hm(new Date(fin.ts)) : '–';
+  $('#t-out').textContent = lout ? hm(new Date(lout.ts)) : '–';
+  let total = 0, openIn = null;
+  t.forEach(r => { if (r.type === 'in') openIn = r.ts; else if (openIn) { total += r.ts - openIn; openIn = null; } });
+  if (openIn) total += Date.now() - openIn;
+  $('#t-dur').textContent = t.length ? fmtDur(total) : '–';
+  $('#t-dur').style.fontSize = '14px';
+  $('#today-list').innerHTML = t.length
+    ? [...t].reverse().map(recordRow).join('')
+    : '<div class="empty"><b>ยังไม่ได้ลงเวลาวันนี้</b>กดปุ่มด้านบนเพื่อถ่ายเซลฟี่เข้างาน</div>';
+}
+
+function renderHello() {
+  $('#hello').innerHTML = profile.name
+    ? `สวัสดี <b>${esc(profile.name)}</b>${profile.dept ? ' · ' + esc(profile.dept) : ''}`
+    : 'สวัสดี · <a href="#" id="go-profile" style="color:var(--accent);font-weight:600">ตั้งชื่อผู้ลงเวลา</a>';
+  const g = $('#go-profile'); if (g) g.onclick = e => { e.preventDefault(); show('settings'); };
+}
+
+/* ---------- camera ---------- */
+let stream = null, shotData = null, shotMeta = null;
+
+async function openCamera() {
+  if (!pos || !evalRes) return;
+  $('#cam').hidden = false; document.body.style.overflow = 'hidden';
+  liveMode();
+  const nt = nextType();
+  $('#cam-tag').textContent = `${nt === 'in' ? 'เข้างาน' : 'ออกงาน'} · ${evalRes.site.name}`;
+  const msg = $('#cam-msg');
+  if (!navigator.mediaDevices?.getUserMedia) {
+    msg.hidden = false; msg.textContent = 'เบราว์เซอร์นี้เปิดกล้องไม่ได้ ต้องเปิดผ่าน https หรือ localhost'; return;
+  }
+  msg.hidden = false; msg.textContent = 'กำลังเปิดกล้อง…';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 1280 } }, audio: false });
+    const v = $('#video'); v.srcObject = stream; await v.play();
+    msg.hidden = true; $('#shutter').disabled = false;
+  } catch (e) {
+    msg.textContent = e.name === 'NotAllowedError'
+      ? 'ไม่ได้รับอนุญาตให้ใช้กล้อง เปิดสิทธิ์กล้องในการตั้งค่าเบราว์เซอร์แล้วลองใหม่'
+      : 'เปิดกล้องไม่สำเร็จ ตรวจสอบว่าไม่มีแอปอื่นใช้กล้องอยู่';
+  }
+}
+
+function stopCamera() { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; $('#video').srcObject = null; }
+function closeCamera() { stopCamera(); $('#cam').hidden = true; document.body.style.overflow = ''; shotData = null; }
+
+function liveMode() {
+  $('#video').hidden = false; $('#shot').hidden = true; $('#guide').style.display = '';
+  $('#live-ctl').hidden = false; $('#confirm-ctl').hidden = true; $('#shutter').disabled = !stream;
+}
+
+function capture() {
+  const v = $('#video'); if (!v.videoWidth) return;
+  $('#flash').classList.remove('go'); void $('#flash').offsetWidth; $('#flash').classList.add('go');
+  const W = 720, H = 960, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  // crop 3:4 จากกลางภาพ แล้วกลับซ้ายขวาให้เหมือนกระจก
+  const vw = v.videoWidth, vh = v.videoHeight, target = W / H;
+  let sw = vw, sh = vh; if (vw / vh > target) sw = vh * target; else sh = vw / target;
+  x.save(); x.translate(W, 0); x.scale(-1, 1);
+  x.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, W, H); x.restore();
+
+  const now = new Date(), nt = nextType();
+  shotMeta = { ts: now.getTime(), type: nt, pos: { ...pos }, site: evalRes.site, dist: evalRes.dist, inRange: evalRes.inRange };
+
+  // แถบลายน้ำหลักฐาน
+  const bandH = 236, y0 = H - bandH;
+  const g = x.createLinearGradient(0, y0 - 40, 0, H);
+  g.addColorStop(0, 'rgba(4,16,14,0)'); g.addColorStop(.25, 'rgba(4,16,14,.78)'); g.addColorStop(1, 'rgba(4,16,14,.92)');
+  x.fillStyle = g; x.fillRect(0, y0 - 40, W, bandH + 40);
+  const F = '"IBM Plex Sans Thai", Tahoma, sans-serif', M = '"IBM Plex Mono", Consolas, monospace';
+  x.textBaseline = 'alphabetic';
+  // pill สถานะ
+  const pill = nt === 'in' ? 'เข้างาน' : 'ออกงาน';
+  x.font = `700 26px ${F}`; const pw = x.measureText(pill).width + 32;
+  x.fillStyle = nt === 'in' ? '#5fc4b3' : '#ffffff'; roundRect(x, 28, y0 + 6, pw, 42, 21); x.fill();
+  x.fillStyle = '#06201c'; x.fillText(pill, 44, y0 + 36);
+  x.fillStyle = '#ffffff'; x.font = `600 56px ${M}`; x.fillText(hms(now), 28 + pw + 18, y0 + 46);
+  x.font = `500 24px ${F}`; x.fillStyle = '#d7e7e3'; x.fillText(thDate.format(now), 28, y0 + 92);
+  x.font = `600 25px ${F}`; x.fillStyle = shotMeta.inRange ? '#8fe0b0' : '#f6c77f';
+  x.fillText(`${shotMeta.inRange ? '✓ ในพื้นที่' : '! นอกพื้นที่'} · ${fit(x, evalRes.site.name, W - 260)} · ${fmtDist(shotMeta.dist)}`, 28, y0 + 132);
+  x.font = `500 21px ${M}`; x.fillStyle = '#b9cdc8';
+  x.fillText(`${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}  ±${pos.acc}m${pos.mock ? '  [TEST]' : ''}`, 28, y0 + 168);
+  x.font = `500 22px ${F}`; x.fillStyle = '#ffffff';
+  const who = [profile.name || 'ไม่ระบุชื่อ', profile.empId, profile.dept].filter(Boolean).join(' · ');
+  x.fillText(fit(x, who, W - 56), 28, y0 + 204);
+
+  shotData = c.toDataURL('image/jpeg', 0.72);
+  $('#shot').src = shotData; $('#shot').hidden = false; $('#video').hidden = true; $('#guide').style.display = 'none';
+  $('#live-ctl').hidden = true; $('#confirm-ctl').hidden = false;
+  $('#out-warn').hidden = shotMeta.inRange;
+  $('#cam-note').value = '';
+  $('#cam-note').placeholder = shotMeta.inRange ? 'หมายเหตุ (ถ้ามี)' : 'หมายเหตุ (ถ้ามี) เช่น ประชุมนอกสถานที่';
+}
+
+function roundRect(x, X, Y, w, h, r) { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); }
+function fit(x, s, max) { if (x.measureText(s).width <= max) return s; while (s.length > 1 && x.measureText(s + '…').width > max) s = s.slice(0, -1); return s + '…'; }
+
+function confirmShot() {
+  if (!shotData || !shotMeta) return;
+  const note = $('#cam-note').value.trim();
+  const r = {
+    id: uid(), type: shotMeta.type, ts: shotMeta.ts,
+    lat: shotMeta.pos.lat, lng: shotMeta.pos.lng, acc: shotMeta.pos.acc, mock: !!shotMeta.pos.mock,
+    siteId: shotMeta.site.id, siteName: shotMeta.site.name, dist: Math.round(shotMeta.dist), inRange: shotMeta.inRange,
+    note, photo: shotData, name: profile.name, empId: profile.empId, ua: navigator.userAgent
+  };
+  records.push(r);
+  const saved = store.set('ci.records', records);
+  if (!saved && canStore) {
+    records.pop(); toast('พื้นที่เก็บข้อมูลในเครื่องเต็ม ส่งออก CSV แล้วล้างประวัติเก่าก่อน'); return;
+  }
+  closeCamera(); renderAll();
+  toast(saved ? `บันทึก${r.type === 'in' ? 'เข้างาน' : 'ออกงาน'}แล้ว ${hm(new Date(r.ts))} น.` : 'บันทึกชั่วคราวเท่านั้น เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล');
+  syncAll();
+}
+
+/* ---------- Google Sheet sync (ผ่าน Apps Script) ---------- */
+let syncing = false;
+const persistRecords = () => store.set('ci.records', records);
+
+async function postSheet(payload) {
+  const res = await fetch(settings.scriptUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // simple request: ไม่มี CORS preflight
+    body: JSON.stringify({ ...payload, token: settings.token || '' })
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'ส่งข้อมูลไม่สำเร็จ');
+  return j;
+}
+
+function sheetRow(r) {
+  const d = new Date(r.ts);
+  return {
+    id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : 'ออกงาน',
+    name: r.name || '', empId: r.empId || '', site: r.siteName, dist: r.dist, inRange: r.inRange ? 'ใช่' : 'ไม่',
+    lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '',
+    editedAt: r.editedAt ? `${dayKey(new Date(r.editedAt))} ${hms(new Date(r.editedAt))}` : '',
+    origTime: r.origTs ? `${dayKey(new Date(r.origTs))} ${hms(new Date(r.origTs))}` : ''
+  };
+}
+
+const pendingCount = () => records.filter(r => !r.synced || r.dirty).length + pendingDeletes.length;
+
+async function syncAll() {
+  if (!settings.scriptUrl || syncing) { renderSyncNote(); return; }
+  syncing = true; renderSyncNote();
+  let err = null;
+  try {
+    for (const id of [...pendingDeletes]) {
+      await postSheet({ action: 'delete', id });
+      pendingDeletes = pendingDeletes.filter(x => x !== id); store.set('ci.pendingDeletes', pendingDeletes);
+    }
+    for (const r of records.filter(r => !r.synced || r.dirty).sort((a, b) => a.ts - b.ts)) {
+      if (!r.synced) {
+        const j = await postSheet({ action: 'add', record: sheetRow(r), photo: r.photo });
+        r.synced = true; r.dirty = false; if (j.photoUrl) r.photoUrl = j.photoUrl;
+      } else {
+        await postSheet({ action: 'update', record: sheetRow(r) });
+        r.dirty = false;
+      }
+      persistRecords();
+    }
+  } catch (e) { err = e; }
+  syncing = false;
+  settings.lastSyncErr = err ? String(err.message || err) : '';
+  renderSyncNote(); renderToday(); if (!$('#pg-history').hidden) renderHistory();
+  return !err;
+}
+
+function renderSyncNote() {
+  const el = $('#sync-note'); if (!el) return;
+  const n = pendingCount();
+  if (!settings.scriptUrl) el.textContent = 'ยังไม่ได้เชื่อมต่อ ข้อมูลจะเก็บไว้ในเครื่องนี้อย่างเดียว';
+  else if (syncing) el.textContent = 'กำลังส่งข้อมูลไป Google Sheet…';
+  else if (settings.lastSyncErr && n) el.textContent = `ส่งไม่สำเร็จ ค้างอยู่ ${n} รายการ (${settings.lastSyncErr}) ระบบจะลองใหม่เมื่อเปิดแอปหรือกดส่งอีกครั้ง`;
+  else el.textContent = n ? `รอส่ง ${n} รายการ` : 'ข้อมูลทั้งหมดส่งเข้า Google Sheet แล้ว';
+}
+
+/* ---------- history ---------- */
+let histFilter = 'all';
+function renderHistory() {
+  const now = new Date();
+  let list = [...records].sort((a, b) => b.ts - a.ts);
+  if (histFilter === 'out') list = list.filter(r => !r.inRange);
+  if (histFilter === 'month') list = list.filter(r => { const d = new Date(r.ts); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+  $('#hist-count').textContent = `${list.length} รายการ`;
+  if (!list.length) { $('#hist-list').innerHTML = '<div class="empty"><b>ไม่มีรายการ</b>รายการที่ลงเวลาจะแสดงที่นี่พร้อมรูปและพิกัด</div>'; return; }
+  let html = '', last = '';
+  list.forEach(r => {
+    const k = dayKey(new Date(r.ts));
+    if (k !== last) { html += `<div class="day-h">${thShort.format(new Date(r.ts))}</div>`; last = k; }
+    html += recordRow(r);
+  });
+  $('#hist-list').innerHTML = html;
+}
+
+function openDetail(id) {
+  const r = records.find(x => x.id === id); if (!r) return;
+  const d = new Date(r.ts);
+  $('#detail-card').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <b style="font-size:18px">${r.type === 'in' ? 'เข้างาน' : 'ออกงาน'} <span class="num">${hms(d)}</span></b>
+      <button class="btn sm" id="detail-close">ปิด</button>
+    </div>
+    <img src="${r.photo}" alt="รูปหลักฐานการลงเวลา">
+    <dl class="kv">
+      <dt>วันที่</dt><dd>${thDate.format(d)}</dd>
+      <dt>จุดทำงาน</dt><dd>${esc(r.siteName)}</dd>
+      <dt>สถานะ</dt><dd>${r.inRange ? '<span class="chip ok"><span class="dot"></span>ในพื้นที่</span>' : '<span class="chip warn"><span class="dot"></span>นอกพื้นที่</span>'} ${r.mock ? '<span class="chip">ทดสอบ</span>' : ''}</dd>
+      <dt>ระยะ</dt><dd class="num">${fmtDist(r.dist)}</dd>
+      <dt>พิกัด</dt><dd class="num">${r.lat.toFixed(6)}, ${r.lng.toFixed(6)} (±${r.acc} ม.)</dd>
+      ${r.note ? `<dt>หมายเหตุ</dt><dd>${esc(r.note)}</dd>` : ''}
+      <dt>ผู้ลงเวลา</dt><dd>${esc([r.name, r.empId].filter(Boolean).join(' · ') || '–')}</dd>
+    </dl>
+    ${r.origTs ? `<div class="note">แก้ไขเวลาจากเดิม ${thShort.format(new Date(r.origTs))} ${hms(new Date(r.origTs))} · รูปยังแสดงเวลาที่ถ่ายจริง</div>` : ''}
+    <div class="btns">
+      <button class="btn primary" id="detail-edit" style="flex:1">แก้ไขรายการ</button>
+      <a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${r.lat},${r.lng}" style="flex:1">ดูใน Google Maps</a>
+    </div>
+    ${r.photoUrl ? `<a class="btn" target="_blank" rel="noopener" href="${esc(r.photoUrl)}">เปิดรูปใน Google Drive</a>` : ''}`;
+  $('#detail').hidden = false;
+  $('#detail-close').onclick = () => $('#detail').hidden = true;
+  $('#detail-edit').onclick = () => openEdit(id);
+}
+
+function openEdit(id) {
+  const r = records.find(x => x.id === id); if (!r) return;
+  const d = new Date(r.ts);
+  const siteOpts = sites.map(s => `<option value="${s.id}" ${s.id === r.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')
+    + (sites.some(s => s.id === r.siteId) ? '' : `<option value="" selected>${esc(r.siteName)}</option>`);
+  $('#detail-card').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <b style="font-size:18px">แก้ไขรายการ</b>
+      <button class="btn sm" id="edit-back">ยกเลิก</button>
+    </div>
+    <form id="edit-form" style="display:flex;flex-direction:column;gap:12px">
+      <div class="field"><label>ประเภท</label>
+        <div class="seg" id="ed-type">
+          <button type="button" data-t="in" class="${r.type === 'in' ? 'on' : ''}">เข้างาน</button>
+          <button type="button" data-t="out" class="${r.type === 'out' ? 'on' : ''}">ออกงาน</button>
+        </div>
+      </div>
+      <div class="field"><label for="ed-ts">วันและเวลา</label>
+        <input class="input num" type="datetime-local" step="1" id="ed-ts" value="${dayKey(d)}T${hms(d)}" required></div>
+      <div class="field"><label for="ed-site">จุดทำงาน</label><select class="input" id="ed-site">${siteOpts}</select></div>
+      <div class="field"><label for="ed-note">หมายเหตุ</label><textarea class="input" id="ed-note" rows="2">${esc(r.note)}</textarea></div>
+      <div class="btns">
+        <button type="button" class="btn danger" id="ed-del">ลบรายการ</button>
+        <span style="flex:1"></span>
+        <button type="submit" class="btn primary">บันทึกการแก้ไข</button>
+      </div>
+    </form>`;
+  let type = r.type;
+  $('#ed-type').onclick = e => { const b = e.target.closest('button'); if (!b) return; type = b.dataset.t; $('#ed-type').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+  $('#edit-back').onclick = () => openDetail(id);
+  $('#ed-del').onclick = e => {
+    const b = e.currentTarget;
+    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อลบ'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ลบรายการ'; }, 3000); return; }
+    records = records.filter(x => x.id !== id); persistRecords();
+    if (r.synced) { pendingDeletes.push(id); store.set('ci.pendingDeletes', pendingDeletes); }
+    $('#detail').hidden = true; renderAll(); toast('ลบรายการแล้ว'); syncAll();
+  };
+  $('#edit-form').onsubmit = e => {
+    e.preventDefault();
+    const ts = new Date($('#ed-ts').value).getTime();
+    if (isNaN(ts)) { toast('วันและเวลาไม่ถูกต้อง'); return; }
+    if (ts !== r.ts && !r.origTs) r.origTs = r.ts;
+    r.ts = ts; r.type = type; r.note = $('#ed-note').value.trim();
+    const s = sites.find(x => x.id === $('#ed-site').value);
+    if (s && s.id !== r.siteId) {
+      r.siteId = s.id; r.siteName = s.name; r.dist = Math.round(haversine(r, s)); r.inRange = r.dist <= s.radius;
+    }
+    r.editedAt = Date.now(); if (r.synced) r.dirty = true;
+    persistRecords(); renderAll(); openDetail(id); toast('บันทึกการแก้ไขแล้ว'); syncAll();
+  };
+}
+
+function exportCSV() {
+  if (!records.length) { toast('ยังไม่มีรายการให้ส่งออก'); return; }
+  const head = ['วันที่', 'เวลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'จุดทำงาน', 'ระยะ(ม.)', 'ในพื้นที่', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ(ม.)', 'หมายเหตุ', 'ทดสอบ'];
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [...records].sort((a, b) => a.ts - b.ts).map(r => {
+    const d = new Date(r.ts);
+    return [dayKey(d), hms(d), r.type === 'in' ? 'เข้างาน' : 'ออกงาน', r.name, r.empId, r.siteName, r.dist, r.inRange ? 'ใช่' : 'ไม่', r.lat, r.lng, r.acc, r.note, r.mock ? 'ใช่' : ''].map(q).join(',');
+  });
+  const blob = new Blob(['﻿' + [head.map(q).join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `checkin-${dayKey(new Date())}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ---------- sites ---------- */
+let editingId = null;
+function initSiteMap() {
+  siteMap = L.map('map-sites', { zoomControl: true }).setView([13.7563, 100.5018], 6);
+  L.tileLayer(TILE, { maxZoom: 19, attribution: ATTR }).addTo(siteMap);
+  siteLayer = L.layerGroup().addTo(siteMap);
+  siteMap.on('click', e => { $('#sf-lat').value = e.latlng.lat.toFixed(6); $('#sf-lng').value = e.latlng.lng.toFixed(6); drawDraft(); });
+  renderSites(true);
+}
+
+function drawDraft() {
+  const lat = parseFloat($('#sf-lat').value), lng = parseFloat($('#sf-lng').value), r = +$('#sf-rad').value;
+  if (draftMarker) { siteMap.removeLayer(draftMarker); siteMap.removeLayer(draftCircle); draftMarker = null; }
+  if (isNaN(lat) || isNaN(lng)) return;
+  draftCircle = L.circle([lat, lng], { radius: r, color: '#d97706', weight: 2, dashArray: '6 6', fillOpacity: .12 }).addTo(siteMap);
+  draftMarker = L.marker([lat, lng]).addTo(siteMap);
+}
+
+function renderSites(fit) {
+  if (siteLayer) drawSites(siteLayer);
+  if (homeSiteLayer) drawSites(homeSiteLayer);
+  if (fit && siteMap && sites.length) siteMap.fitBounds(L.latLngBounds(sites.map(s => [s.lat, s.lng])).pad(.3), { maxZoom: 15 });
+  $('#site-list').innerHTML = sites.length ? sites.map(s => `
+    <div class="row">
+      <div class="loc-ico" style="width:38px;height:38px;background:var(--accent-soft);color:var(--accent)">${ICON.bld}</div>
+      <div class="row-main" data-focus="${s.id}" style="cursor:pointer">
+        <div class="row-title">${esc(s.name)}</div>
+        <div class="row-sub num">${s.lat.toFixed(5)}, ${s.lng.toFixed(5)} · รัศมี ${s.radius} ม.</div>
+      </div>
+      <div class="btns" style="flex-wrap:nowrap">
+        <button class="btn sm" data-edit="${s.id}">แก้ไข</button>
+        <button class="btn sm danger" data-del="${s.id}">ลบ</button>
+      </div>
+    </div>`).join('') : '<div class="empty"><b>ยังไม่มีจุดทำงาน</b>เพิ่มอย่างน้อยหนึ่งจุดเพื่อเริ่มลงเวลา</div>';
+}
+
+function resetSiteForm() {
+  editingId = null; $('#site-form').reset(); $('#sf-rad').value = 300; $('#sf-rad-v').textContent = 300;
+  $('#site-form-title').textContent = 'เพิ่มจุดทำงาน'; $('#sf-save').textContent = 'บันทึกจุด'; $('#sf-cancel').hidden = true; drawDraft();
+}
+
+function saveSites() { store.set('ci.sites.v2', sites); renderSites(false); if (pos) setPos(pos); }
+
+/* ---------- navigation ---------- */
+function show(pg) {
+  ['home', 'history', 'sites', 'settings'].forEach(p => $('#pg-' + p).hidden = p !== pg);
+  document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.pg === pg));
+  if (pg === 'home') setTimeout(() => homeMap.invalidateSize(), 30);
+  if (pg === 'sites') { if (!siteMap) initSiteMap(); setTimeout(() => siteMap.invalidateSize(), 30); }
+  if (pg === 'history') renderHistory();
+  if (pg === 'settings') renderSettings();
+  window.scrollTo(0, 0);
+}
+
+function renderSettings() {
+  $('#pf-name').value = profile.name; $('#pf-id').value = profile.empId; $('#pf-dept').value = profile.dept;
+  $('#set-demo').checked = settings.demo; $('#set-allow-out').checked = settings.allowOut;
+  $('#gs-url').value = settings.scriptUrl || ''; $('#gs-token').value = settings.token || ''; renderSyncNote();
+  let kb = 0; try { kb = Math.round((localStorage.getItem('ci.records') || '').length / 1024); } catch {}
+  $('#storage-note').textContent = `เก็บไว้ในเบราว์เซอร์เครื่องนี้ ${records.length} รายการ (ประมาณ ${kb.toLocaleString('th-TH')} KB) ส่งออก CSV จากแท็บประวัติเป็นระยะเพื่อสำรองข้อมูล`;
+}
+
+function renderAll() { renderHello(); renderStatus(); renderToday(); renderHistory(); }
+
+/* ---------- events ---------- */
+document.querySelectorAll('.nav button').forEach(b => b.onclick = () => show(b.dataset.pg));
+$('#cta').onclick = openCamera;
+$('#cam-close').onclick = closeCamera;
+$('#shutter').onclick = capture;
+$('#retake').onclick = liveMode;
+$('#confirm').onclick = confirmShot;
+$('#detail').onclick = e => { if (e.target.id === 'detail') $('#detail').hidden = true; };
+document.addEventListener('click', e => { const row = e.target.closest('.row[data-id]'); if (row) openDetail(row.dataset.id); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#detail').hidden) $('#detail').hidden = true; else if (!$('#cam').hidden) closeCamera(); } });
+
+$('#hist-filter').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  histFilter = b.dataset.f; document.querySelectorAll('#hist-filter button').forEach(x => x.classList.toggle('on', x === b)); renderHistory();
+};
+$('#export-csv').onclick = exportCSV;
+
+$('#sf-rad').oninput = () => { $('#sf-rad-v').textContent = $('#sf-rad').value; drawDraft(); };
+$('#sf-lat').onchange = $('#sf-lng').onchange = drawDraft;
+$('#sf-here').onclick = () => {
+  if (!pos) { toast('ยังไม่ได้รับตำแหน่งปัจจุบัน'); return; }
+  $('#sf-lat').value = pos.lat.toFixed(6); $('#sf-lng').value = pos.lng.toFixed(6); drawDraft(); siteMap.setView([pos.lat, pos.lng], 17);
+};
+$('#sf-cancel').onclick = resetSiteForm;
+$('#site-form').onsubmit = e => {
+  e.preventDefault();
+  const name = $('#sf-name').value.trim(), lat = parseFloat($('#sf-lat').value), lng = parseFloat($('#sf-lng').value), radius = +$('#sf-rad').value;
+  if (!name || isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) { toast('กรอกชื่อและพิกัดให้ถูกต้อง'); return; }
+  if (editingId) Object.assign(sites.find(s => s.id === editingId), { name, lat, lng, radius });
+  else sites.push({ id: uid(), name, lat, lng, radius });
+  saveSites(); toast(editingId ? 'แก้ไขจุดทำงานแล้ว' : 'เพิ่มจุดทำงานแล้ว'); resetSiteForm();
+};
+$('#site-list').onclick = e => {
+  const ed = e.target.closest('[data-edit]'), del = e.target.closest('[data-del]'), fc = e.target.closest('[data-focus]');
+  if (ed) {
+    const s = sites.find(x => x.id === ed.dataset.edit); editingId = s.id;
+    $('#sf-name').value = s.name; $('#sf-lat').value = s.lat; $('#sf-lng').value = s.lng; $('#sf-rad').value = s.radius; $('#sf-rad-v').textContent = s.radius;
+    $('#site-form-title').textContent = 'แก้ไขจุดทำงาน'; $('#sf-save').textContent = 'บันทึกการแก้ไข'; $('#sf-cancel').hidden = false;
+    drawDraft(); siteMap.setView([s.lat, s.lng], 16); $('#site-form').scrollIntoView({ behavior: 'smooth' });
+  } else if (del) {
+    if (!del.classList.contains('armed')) { del.classList.add('armed'); del.textContent = 'ยืนยันลบ'; setTimeout(() => { del.classList.remove('armed'); del.textContent = 'ลบ'; }, 3000); return; }
+    sites = sites.filter(s => s.id !== del.dataset.del); saveSites(); toast('ลบจุดทำงานแล้ว');
+  } else if (fc) {
+    const s = sites.find(x => x.id === fc.dataset.focus); siteMap.setView([s.lat, s.lng], 16);
+  }
+};
+
+$('#profile-form').onsubmit = e => {
+  e.preventDefault();
+  profile = { name: $('#pf-name').value.trim(), empId: $('#pf-id').value.trim(), dept: $('#pf-dept').value.trim() };
+  store.set('ci.profile', profile); renderHello(); toast('บันทึกข้อมูลผู้ลงเวลาแล้ว');
+};
+const readSheetForm = () => {
+  settings.scriptUrl = $('#gs-url').value.trim(); settings.token = $('#gs-token').value.trim();
+  if (settings.scriptUrl && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(settings.scriptUrl)) { toast('URL ต้องขึ้นต้นด้วย https://script.google.com/macros/s/ และลงท้ายด้วย /exec'); return false; }
+  store.set('ci.settings', settings); return true;
+};
+$('#sheet-form').onsubmit = e => { e.preventDefault(); if (readSheetForm()) { toast('บันทึกการเชื่อมต่อแล้ว'); syncAll(); } };
+$('#gs-test').onclick = async () => {
+  if (!readSheetForm() || !settings.scriptUrl) { if (!settings.scriptUrl) toast('กรอก Apps Script URL ก่อน'); return; }
+  $('#sync-note').textContent = 'กำลังทดสอบ…';
+  try { const j = await postSheet({ action: 'ping' }); toast(`เชื่อมต่อสำเร็จ: ${j.sheet || 'Google Sheet'}`); }
+  catch (e) { toast(`เชื่อมต่อไม่สำเร็จ: ${e.message}`); }
+  renderSyncNote();
+};
+$('#gs-sync').onclick = async () => {
+  if (!settings.scriptUrl) { toast('กรอก Apps Script URL ก่อน'); return; }
+  if (!pendingCount()) { toast('ไม่มีรายการค้างส่ง'); return; }
+  toast((await syncAll()) ? 'ส่งข้อมูลครบแล้ว' : 'ยังส่งไม่สำเร็จ ดูรายละเอียดด้านบน');
+};
+window.addEventListener('online', syncAll);
+$('#set-demo').onchange =e => { settings.demo = e.target.checked; store.set('ci.settings', settings); pos = null; startGeo(); renderStatus(); };
+$('#set-allow-out').onchange = e => { settings.allowOut = e.target.checked; store.set('ci.settings', settings); renderStatus(); };
+$('#clear-data').onclick = e => {
+  const b = e.currentTarget;
+  if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อยืนยันการล้าง'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ล้างประวัติการลงเวลา'; }, 3500); return; }
+  records = []; store.set('ci.records', records); renderAll(); renderSettings(); toast('ล้างประวัติแล้ว');
+  b.classList.remove('armed'); b.textContent = 'ล้างประวัติการลงเวลา';
+};
+
+/* ---------- boot ---------- */
+tick(); setInterval(tick, 1000); setInterval(renderToday, 30000);
+initHomeMap();
+renderAll();
+startGeo();
+syncAll();
+})();
+</script>
+</body>
+</html>
