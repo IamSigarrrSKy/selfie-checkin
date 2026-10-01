@@ -190,6 +190,13 @@ function buildLog(ss) {
     const sitesCol = sh.getRange(2, 7, last - 1, 1).getValues();
     const regionCol = sh.getRange(2, COL_REGION, last - 1, 1).getValues();
     sh.getRange(2, COL_REGION, last - 1, 1).setValues(regionCol.map((v, i) => [v[0] || regionOf(sitesCol[i][0])]));
+    // แถวที่บันทึกก่อนมีคอลัมน์ลิงก์รูป: ดึง URL จากสูตร HYPERLINK ในคอลัมน์รูป
+    const photoF = sh.getRange(2, 14, last - 1, 1).getFormulas();
+    const urlCol = sh.getRange(2, COL_PHOTO_URL, last - 1, 1).getValues();
+    sh.getRange(2, COL_PHOTO_URL, last - 1, 1).setValues(urlCol.map((v, i) => {
+      const m = String(photoF[i][0]).match(/HYPERLINK\("([^"]+)"/i);
+      return [v[0] || (m ? m[1] : '')];
+    }));
   }
 
   const rows = sh.getMaxRows() - 1;
