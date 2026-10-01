@@ -400,13 +400,14 @@ const DEFAULT_SITES = [
 ];
 
 // ใส่ URL ของ Apps Script ไว้ตรงนี้ได้เลย หรือกรอกในหน้าตั้งค่าของแอป
-const SHEET_URL_DEFAULT = '';
+const SHEET_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyBZqSHeAKm1SNr2AI0usVCBf2OPvkP1z7tJAFVA8DyJEfaHCONCBqU6NbXqysY2P61tA/exec';
 
 const canStore = (() => { try { localStorage.setItem('ci._t', '1'); localStorage.removeItem('ci._t'); return true; } catch { return false; } })();
 let sites    = store.get('ci.sites.v2', DEFAULT_SITES);
 let records  = store.get('ci.records', []);
 let profile  = store.get('ci.profile', { name: '', empId: '', dept: '' });
 let settings = Object.assign({ demo: false, allowOut: true, scriptUrl: SHEET_URL_DEFAULT, token: '' }, store.get('ci.settings', {}));
+if (!settings.scriptUrl) settings.scriptUrl = SHEET_URL_DEFAULT;   // ค่าว่างที่เคยบันทึกไว้ ให้ใช้ URL ที่ฝังไว้แทน
 let pendingDeletes = store.get('ci.pendingDeletes', []);
 
 let pos = null;          // {lat,lng,acc,ts,mock}
