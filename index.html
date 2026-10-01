@@ -281,6 +281,7 @@ button{cursor:pointer}
 
     <form class="card form" id="leave-form" hidden autocomplete="off">
       <div class="sec-title" id="leave-form-title" style="margin:0">ลาป่วย</div>
+      <div class="field"><label for="lv-name">ชื่อผู้ลา</label><input class="input" id="lv-name" required placeholder="ชื่อ–นามสกุล"></div>
       <div class="grid2">
         <div class="field"><label for="lv-from">ตั้งแต่วันที่</label><input class="input num" type="date" id="lv-from" required></div>
         <div class="field"><label for="lv-to">ถึงวันที่</label><input class="input num" type="date" id="lv-to" required></div>
@@ -1066,6 +1067,7 @@ function openLeaveForm(type) {
   $('#leave-form-title').textContent = LEAVE_TYPES[type];
   const t = dayKey(new Date());
   $('#lv-from').value = t; $('#lv-to').value = t; $('#lv-note').value = '';
+  $('#lv-name').value = profile.name || '';
   $('#leave-form').hidden = false; updateLeaveCount();
   $('#leave-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -1078,11 +1080,14 @@ function updateLeaveCount() {
 function saveLeave() {
   const from = $('#lv-from').value, to = $('#lv-to').value;
   const days = leaveDays(from, to, $('#lv-skip').checked);
+  const name = $('#lv-name').value.trim();
+  if (!name) { $('#lv-name').focus(); toast('กรอกชื่อผู้ลา'); return; }
+  if (!profile.name) { profile.name = name; store.set('ci.profile', profile); renderHello(); }
   if (!days.length) { toast('เลือกช่วงวันที่ให้ถูกต้อง'); return; }
-  const dup = days.filter(d => leaves.some(l => l.days.includes(d)));
+  const dup = days.filter(d => leaves.some(l => (l.name || '') === name && l.days.includes(d)));
   if (dup.length) { toast(`มีการลาวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
   leaves.push({ id: uid(), type: leaveType, from, to, days, note: $('#lv-note').value.trim(),
-    createdAt: Date.now(), name: profile.name, empId: profile.empId });
+    createdAt: Date.now(), name, empId: profile.empId });
   persistLeaves();
   $('#leave-form').hidden = true;
   leaveMonth = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1);
@@ -1108,7 +1113,7 @@ function renderLeave() {
     return `<div class="row">
       <div class="row-main">
         <div class="row-title"><span class="chip ${l.type === 'sick' ? 'sick' : 'vac'}">${LEAVE_TYPES[l.type]}</span> ${range}${pend}</div>
-        <div class="row-sub">${n} วันในเดือนนี้${l.days.length !== n ? ` (ทั้งหมด ${l.days.length} วัน)` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
+        <div class="row-sub">${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${l.days.length !== n ? ` (ทั้งหมด ${l.days.length} วัน)` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
       </div>
       <button class="btn sm danger" data-lv-del="${l.id}">ยกเลิกการลา</button>
     </div>`;

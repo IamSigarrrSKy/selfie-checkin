@@ -364,7 +364,8 @@ function leaveSheet() {
 function addLeave(l) {
   const sh = leaveSheet();
   if (findRow(sh, l.id)) return { ok: true, duplicate: true };
-  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, l.name, l.empId, l.note, l.created]);
+  const name = String(l.name || '').trim() || 'ไม่ระบุชื่อ';
+  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, l.empId, l.note, l.created]);
   if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
   return { ok: true };
 }
@@ -398,45 +399,47 @@ function buildLeave(ss) {
   return sh;
 }
 
-/* ---------- สรุปการลารายเดือน ---------- */
+/* ---------- สรุปการลารายเดือน (แยกตามผู้ลา) ---------- */
 function buildLeaveSummary(ss) {
   const sh = sheet(ss, LEAVE_SUM);
   sh.clear();
   sh.getBandings().forEach(b => b.remove());
   const V = "'" + LEAVE + "'!";
-  const head = ['เดือน', 'ลาป่วย', 'ลาพักผ่อน', 'รวม', 'วันที่ลา'];
+  const head = ['เดือน', 'ผู้ลา', 'ลาป่วย', 'ลาพักผ่อน', 'รวม', 'วันที่ลา'];
   trimColumns(sh, head.length);
   sh.setTabColor('#b4282f');
 
   sh.getRange('A1').setValue('สรุปการลารายเดือน').setFontSize(16).setFontWeight('bold').setFontColor(C.title);
   sh.setRowHeight(1, 34);
   const yr = (type) => 'COUNTIFS(' + V + 'B2:B,">="&DATE(YEAR(TODAY()),1,1),' + V + 'B2:B,"<="&DATE(YEAR(TODAY()),12,31),' + V + 'C2:C,"' + type + '")';
-  sh.getRange('A2').setFormula('="ปีนี้ · ลาป่วย "&' + yr('ลาป่วย') + '&" วัน · ลาพักผ่อน "&' + yr('ลาพักผ่อน') + '&" วัน"')
+  sh.getRange('A2').setFormula('="ปีนี้ทุกคน · ลาป่วย "&' + yr('ลาป่วย') + '&" วัน · ลาพักผ่อน "&' + yr('ลาพักผ่อน') + '&" วัน"')
     .setFontColor(C.muted);
 
   sh.getRange(4, 1, 1, head.length).setValues([head]);
   styleHeader(sh, 4, head.length);
 
-  const inM = 'B2:B,">="&m,' + V + 'B2:B,"<="&EOMONTH(m,0)';
+  // แถวละหนึ่งคนต่อหนึ่งเดือน เรียงเดือนล่าสุดก่อน แล้วเรียงตามชื่อ
+  sh.getRange('A5').setFormula('=IFERROR(SORT(UNIQUE(FILTER({ARRAYFORMULA(EOMONTH(' + V + 'B2:B,-1)+1),' + V + 'D2:D},' + V + 'B2:B<>"")),1,FALSE,2,TRUE),)');
+  const cnt = (type) => 'COUNTIFS(' + V + 'B2:B,">="&m,' + V + 'B2:B,"<="&EOMONTH(m,0),' + V + 'D2:D,n,' + V + 'C2:C,"' + type + '")';
   const days = (type) => 'IFERROR("' + type.replace('ลา', '') + ' "&TEXTJOIN(", ",TRUE,ARRAYFORMULA(TEXT(SORT(FILTER(' + V + 'B2:B,' +
-    V + 'B2:B>=m,' + V + 'B2:B<=EOMONTH(m,0),' + V + 'C2:C="' + type + '")),"d"))),"")';
-  sh.getRange('A5').setFormula('=IFERROR(SORT(UNIQUE(FILTER(ARRAYFORMULA(EOMONTH(' + V + 'B2:B,-1)+1),' + V + 'B2:B<>"")),1,FALSE),)');
-  sh.getRange('B5').setFormula('=MAP(A5:A,LAMBDA(m,IF(m="",,COUNTIFS(' + V + inM + ',' + V + 'C2:C,"ลาป่วย"))))');
-  sh.getRange('C5').setFormula('=MAP(A5:A,LAMBDA(m,IF(m="",,COUNTIFS(' + V + inM + ',' + V + 'C2:C,"ลาพักผ่อน"))))');
-  sh.getRange('D5').setFormula('=MAP(B5:B,C5:C,LAMBDA(s,v,IF(AND(s="",v=""),,s+v)))');
-  sh.getRange('E5').setFormula('=MAP(A5:A,LAMBDA(m,IF(m="",,TRIM(' + days('ลาป่วย') + '&"   "&' + days('ลาพักผ่อน') + '))))');
+    V + 'B2:B>=m,' + V + 'B2:B<=EOMONTH(m,0),' + V + 'D2:D=n,' + V + 'C2:C="' + type + '")),"d"))),"")';
+  sh.getRange('C5').setFormula('=MAP(A5:A,B5:B,LAMBDA(m,n,IF(m="",,' + cnt('ลาป่วย') + ')))');
+  sh.getRange('D5').setFormula('=MAP(A5:A,B5:B,LAMBDA(m,n,IF(m="",,' + cnt('ลาพักผ่อน') + ')))');
+  sh.getRange('E5').setFormula('=MAP(C5:C,D5:D,LAMBDA(s,v,IF(AND(s="",v=""),,s+v)))');
+  sh.getRange('F5').setFormula('=MAP(A5:A,B5:B,LAMBDA(m,n,IF(m="",,TRIM(' + days('ลาป่วย') + '&"   "&' + days('ลาพักผ่อน') + '))))');
 
   const rows = sh.getMaxRows() - 4;
   sh.getRange(5, 1, rows, 1).setNumberFormat('mmmm yyyy').setHorizontalAlignment('left');
-  sh.getRange(5, 2, rows, 3).setNumberFormat('0 "วัน"').setHorizontalAlignment('center');
-  sh.getRange(5, 5, rows, 1).setWrap(true);
-  [140, 100, 110, 90, 380].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  sh.getRange(5, 2, rows, 1).setFontWeight('bold');
+  sh.getRange(5, 3, rows, 3).setNumberFormat('0 "วัน"').setHorizontalAlignment('center');
+  sh.getRange(5, 6, rows, 1).setWrap(true);
+  [130, 200, 90, 100, 80, 340].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(5, 1, rows, head.length));
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0)
-      .setFontColor('#b4282f').setBold(true).setRanges([sh.getRange(5, 2, rows, 1)]).build(),
+      .setFontColor('#b4282f').setBold(true).setRanges([sh.getRange(5, 3, rows, 1)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0)
-      .setFontColor('#0e5a52').setBold(true).setRanges([sh.getRange(5, 3, rows, 1)]).build()
+      .setFontColor('#0e5a52').setBold(true).setRanges([sh.getRange(5, 4, rows, 1)]).build()
   ]);
   return sh;
 }
