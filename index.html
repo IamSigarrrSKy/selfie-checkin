@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0e5a52">
-<title>ลงเวลาเซลฟี่</title>
+<title>เช็คอินเซลฟี่</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -187,7 +187,7 @@ button{cursor:pointer}
 <body>
 <div class="app">
 
-  <!-- ===== ลงเวลา ===== -->
+  <!-- ===== เช็คอิน ===== -->
   <section class="page" id="pg-home">
     <div class="top">
       <div>
@@ -211,23 +211,23 @@ button{cursor:pointer}
       </div>
       <div class="map" id="map-home"></div>
       <div class="loc-meta">
-        <div><div class="lbl">ระยะจากจุด</div><div class="val num" id="m-dist">–</div></div>
-        <div><div class="lbl">รัศมีที่อนุญาต</div><div class="val num" id="m-rad">–</div></div>
+        <div><div class="lbl" id="m-dist-lbl">จุดใกล้สุด</div><div class="val num" id="m-dist">–</div></div>
+        <div><div class="lbl">พิกัด</div><div class="val num" id="m-coord">–</div></div>
         <div><div class="lbl">ความแม่นยำ GPS</div><div class="val num" id="m-acc">–</div></div>
       </div>
     </div>
 
     <button class="cta" id="cta" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-      <span id="cta-label">ถ่ายเซลฟี่ เข้างาน</span>
+      <span id="cta-label">ถ่ายเซลฟี่ เช็คอิน</span>
     </button>
     <div class="hint" id="cta-hint">รอสัญญาณตำแหน่งก่อนถ่ายรูป</div>
 
     <div class="sec-title">วันนี้</div>
     <div class="card today">
-      <div><div class="lbl">เข้างาน</div><div class="val" id="t-in">–</div></div>
-      <div><div class="lbl">ออกงาน</div><div class="val" id="t-out">–</div></div>
-      <div><div class="lbl">รวมเวลา</div><div class="val" id="t-dur">–</div></div>
+      <div><div class="lbl">เช็คอิน</div><div class="val" id="t-count">–</div></div>
+      <div><div class="lbl">ครั้งแรก</div><div class="val" id="t-first">–</div></div>
+      <div><div class="lbl">ล่าสุด</div><div class="val" id="t-last">–</div></div>
     </div>
     <div class="card list" id="today-list"></div>
   </section>
@@ -235,13 +235,13 @@ button{cursor:pointer}
   <!-- ===== ประวัติ ===== -->
   <section class="page" id="pg-history" hidden>
     <div class="top">
-      <div><div class="clock" style="font-family:var(--font);font-size:26px">ประวัติการลงเวลา</div>
+      <div><div class="clock" style="font-family:var(--font);font-size:26px">ประวัติการเช็คอิน</div>
       <div class="date" id="hist-count"></div></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
       <div class="seg" id="hist-filter">
         <button data-f="all" class="on">ทั้งหมด</button>
-        <button data-f="out">นอกพื้นที่</button>
+        <button data-f="out">นอกจุดที่บันทึก</button>
         <button data-f="month">เดือนนี้</button>
       </div>
       <button class="btn sm" id="export-csv">
@@ -256,7 +256,7 @@ button{cursor:pointer}
   <section class="page" id="pg-sites" hidden>
     <div class="top">
       <div><div class="clock" style="font-family:var(--font);font-size:26px">จุดทำงาน</div>
-      <div class="date">ลงเวลาได้เมื่ออยู่ในรัศมีของจุดใดจุดหนึ่ง</div></div>
+      <div class="date">เช็คอินในรัศมีของจุดเหล่านี้จะใช้ชื่อจุดเป็นสถานที่</div></div>
     </div>
     <div class="card" style="overflow:hidden">
       <div class="map" id="map-sites" style="height:260px;border-top:0"></div>
@@ -286,7 +286,7 @@ button{cursor:pointer}
   <!-- ===== ตั้งค่า ===== -->
   <section class="page" id="pg-settings" hidden>
     <div class="top"><div><div class="clock" style="font-family:var(--font);font-size:26px">ตั้งค่า</div></div></div>
-    <div class="sec-title">ข้อมูลผู้ลงเวลา</div>
+    <div class="sec-title">ข้อมูลผู้เช็คอิน</div>
     <form class="card form" id="profile-form" autocomplete="off">
       <div class="field"><label for="pf-name">ชื่อ–นามสกุล</label><input class="input" id="pf-name" placeholder="ชื่อที่จะพิมพ์ลงบนรูป"></div>
       <div class="grid2">
@@ -299,18 +299,14 @@ button{cursor:pointer}
     <div class="sec-title admin-only">การทำงาน</div>
     <div class="card admin-only">
       <label class="switch" for="set-demo">
-        <div><b>โหมดทดสอบ</b><div class="note">ใช้ตำแหน่งจำลอง แตะแผนที่หน้าลงเวลาเพื่อย้ายตำแหน่ง รายการที่บันทึกจะถูกติดป้าย “ทดสอบ”</div></div>
+        <div><b>โหมดทดสอบ</b><div class="note">ใช้ตำแหน่งจำลอง แตะแผนที่หน้าเช็คอินเพื่อย้ายตำแหน่ง รายการที่บันทึกจะถูกติดป้าย “ทดสอบ”</div></div>
         <input type="checkbox" id="set-demo">
-      </label>
-      <label class="switch" for="set-allow-out">
-        <div><b>อนุญาตลงเวลานอกพื้นที่</b><div class="note">รายการจะถูกทำเครื่องหมาย “นอกพื้นที่” ใส่หมายเหตุได้ถ้าต้องการ</div></div>
-        <input type="checkbox" id="set-allow-out" checked>
       </label>
     </div>
 
     <div class="sec-title admin-only">Google Sheet</div>
     <form class="card form admin-only" id="sheet-form" autocomplete="off">
-      <div class="note">วาง URL ของ Apps Script ที่ Deploy แล้ว (ลงท้ายด้วย <span class="num">/exec</span>) ทุกการลงเวลาจะส่งเข้า Sheet พร้อมเก็บรูปใน Google Drive</div>
+      <div class="note">วาง URL ของ Apps Script ที่ Deploy แล้ว (ลงท้ายด้วย <span class="num">/exec</span>) ทุกการเช็คอินจะส่งเข้า Sheet พร้อมเก็บรูปใน Google Drive</div>
       <div class="field"><label for="gs-url">Apps Script URL</label><input class="input num" id="gs-url" placeholder="https://script.google.com/macros/s/…/exec"></div>
       <div class="field"><label for="gs-token">รหัสลับ (ให้ตรงกับ TOKEN ในสคริปต์)</label><input class="input" id="gs-token" placeholder="เว้นว่างได้"></div>
       <div class="note" id="sync-note"></div>
@@ -325,7 +321,7 @@ button{cursor:pointer}
     <div class="sec-title admin-only">ข้อมูลในเครื่อง</div>
     <div class="card form admin-only">
       <div class="note" id="storage-note"></div>
-      <div class="btns"><button class="btn danger" id="clear-data">ล้างประวัติการลงเวลา</button></div>
+      <div class="btns"><button class="btn danger" id="clear-data">ล้างประวัติการเช็คอิน</button></div>
     </div>
   </section>
 </div>
@@ -333,7 +329,7 @@ button{cursor:pointer}
 <!-- bottom nav -->
 <nav class="nav">
   <div class="nav-in">
-    <button data-pg="home" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>ลงเวลา</button>
+    <button data-pg="home" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>เช็คอิน</button>
     <button data-pg="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>ประวัติ</button>
     <button data-pg="sites" class="admin-only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>จุดทำงาน</button>
     <button data-pg="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>ตั้งค่า</button>
@@ -368,11 +364,11 @@ button{cursor:pointer}
       <input type="file" id="upload-input" accept="image/*" hidden>
     </div>
     <div class="confirm-wrap" id="confirm-ctl" hidden>
-      <div class="warnbox" id="out-warn" hidden>คุณอยู่นอกพื้นที่จุดทำงาน รายการจะถูกทำเครื่องหมาย “นอกพื้นที่”</div>
-      <textarea class="input" id="cam-note" rows="2" placeholder="หมายเหตุ (ถ้ามี) เช่น ประชุมนอกสถานที่"></textarea>
+      <div class="warnbox" id="out-warn" hidden></div>
+      <textarea class="input" id="cam-note" rows="2" placeholder="หมายเหตุ (ถ้ามี)"></textarea>
       <div class="btns" style="justify-content:stretch">
         <button class="btn" id="retake" style="flex:1">ถ่ายใหม่</button>
-        <button class="btn primary" id="confirm" style="flex:2">ยืนยันลงเวลา</button>
+        <button class="btn primary" id="confirm" style="flex:2">ยืนยันเช็คอิน</button>
       </div>
     </div>
   </div>
@@ -542,12 +538,36 @@ function setPos(p) {
   });
   if (evalRes) evalRes.inRange = evalRes.dist <= evalRes.site.radius;
   renderStatus(); updateHomeMap();
+  lookupAddress(p);
+}
+
+/* ---------- ชื่อสถานที่จากพิกัด (OpenStreetMap) ---------- */
+let addr = null;            // { lat, lng, text }
+let addrPending = false;
+async function lookupAddress(p) {
+  if (addrPending || (addr && haversine(addr, p) < 150)) return;   // ขยับไม่ถึง 150 ม. ใช้ชื่อเดิม
+  addrPending = true;
+  try {
+    const u = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&accept-language=th&lat=${p.lat}&lon=${p.lng}`;
+    const j = await fetch(u).then(r => r.json());
+    const a = j.address || {};
+    const parts = [a.village || a.suburb || a.quarter || a.town || a.hamlet, a.city_district || a.county || a.city || a.municipality, a.state || a.province]
+      .filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i);
+    addr = { lat: p.lat, lng: p.lng, text: parts.join(' ') || (j.display_name || '').split(',').slice(0, 3).join(' ') };
+  } catch { /* ออฟไลน์: ใช้พิกัดแทน */ }
+  addrPending = false;
+  renderStatus();
+}
+
+// ชื่อสถานที่ของตำแหน่งปัจจุบัน: อยู่ในจุดที่บันทึกไว้ใช้ชื่อจุด ไม่งั้นใช้ ตำบล อำเภอ จังหวัด
+function currentPlace() {
+  if (evalRes && evalRes.inRange) return evalRes.site.name;
+  if (addr && pos && haversine(addr, pos) < 500) return addr.text;
+  return pos ? `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}` : '';
 }
 
 /* ---------- home rendering ---------- */
 function todayRecords() { const k = dayKey(new Date()); return records.filter(r => dayKey(new Date(r.ts)) === k).sort((a, b) => a.ts - b.ts); }
-function nextType() { const t = todayRecords(); return t.length && t[t.length - 1].type === 'in' ? 'out' : 'in'; }
-
 function renderStatus() {
   const card = $('#loc-card'), ico = $('#loc-ico'), title = $('#loc-title'), sub = $('#loc-sub');
   card.classList.remove('ok', 'warn', 'bad');
@@ -555,33 +575,28 @@ function renderStatus() {
   if (geoErr) {
     card.classList.add('bad'); ico.innerHTML = ICON.warn;
     title.textContent = 'ระบุตำแหน่งไม่ได้'; sub.textContent = geoErr;
-    hint = 'ต้องมีตำแหน่งก่อนจึงลงเวลาได้';
+    hint = 'ต้องมีตำแหน่งก่อนจึงเช็คอินได้';
   } else if (!pos) {
     ico.innerHTML = ICON.wait; title.textContent = 'กำลังหาตำแหน่ง…';
     sub.textContent = 'อนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม'; hint = 'รอสัญญาณตำแหน่งก่อนถ่ายรูป';
-  } else if (!evalRes) {
-    card.classList.add('warn'); ico.innerHTML = ICON.warn;
-    title.textContent = 'ยังไม่มีจุดทำงาน'; sub.textContent = 'เพิ่มจุดทำงานในแท็บ “จุดทำงาน” ก่อน';
-    hint = 'ยังไม่ได้ตั้งค่าจุดทำงาน';
-  } else if (evalRes.inRange) {
-    card.classList.add('ok'); ico.innerHTML = ICON.ok;
-    title.textContent = evalRes.site.name; sub.textContent = 'อยู่ในพื้นที่ปฏิบัติงาน พร้อมลงเวลา';
-    canGo = true; hint = pos.acc > 100 ? `สัญญาณ GPS คลาดเคลื่อน ±${pos.acc} ม. ลองรอสักครู่ให้แม่นยำขึ้น` : 'ระบบจะบันทึกรูป เวลา และพิกัดเป็นหลักฐาน';
   } else {
-    card.classList.add('warn'); ico.innerHTML = ICON.warn;
-    title.textContent = 'อยู่นอกพื้นที่ปฏิบัติงาน';
-    sub.textContent = `จุดที่ใกล้ที่สุด: ${evalRes.site.name}`;
-    canGo = settings.allowOut;
-    hint = settings.allowOut ? 'ลงเวลาได้ รายการจะถูกทำเครื่องหมาย “นอกพื้นที่”' : 'เข้าไปในรัศมีของจุดทำงานเพื่อลงเวลา';
+    canGo = true;
+    title.textContent = currentPlace();
+    if (evalRes && evalRes.inRange) {
+      card.classList.add('ok'); ico.innerHTML = ICON.ok;
+      sub.textContent = 'อยู่ในจุดที่บันทึกไว้';
+    } else {
+      ico.innerHTML = ICON.pin;
+      sub.textContent = addrPending && !addr ? 'กำลังหาชื่อสถานที่…' : 'ตำแหน่งปัจจุบัน';
+    }
+    hint = pos.acc > 100 ? `สัญญาณ GPS คลาดเคลื่อน ±${pos.acc} ม. ลองรอสักครู่ให้แม่นยำขึ้น` : 'ระบบจะบันทึกรูป เวลา และสถานที่';
   }
+  $('#m-dist-lbl').textContent = evalRes ? (evalRes.inRange ? 'ห่างจากจุด' : 'จุดใกล้สุด') : 'จุดใกล้สุด';
   $('#m-dist').textContent = evalRes ? fmtDist(evalRes.dist) : '–';
-  $('#m-rad').textContent  = evalRes ? `${evalRes.site.radius} ม.` : '–';
+  $('#m-coord').textContent = pos ? `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}` : '–';
   $('#m-acc').textContent  = pos ? `±${pos.acc} ม.` : '–';
 
-  const nt = nextType(), cta = $('#cta');
-  cta.disabled = !canGo;
-  cta.classList.toggle('out', nt === 'out');
-  $('#cta-label').textContent = nt === 'in' ? 'ถ่ายเซลฟี่ เข้างาน' : 'ถ่ายเซลฟี่ ออกงาน';
+  $('#cta').disabled = !canGo;
   $('#cta-hint').textContent = hint;
   $('#mode-chip').hidden = !demoOn();
   $('#mode-chip').className = 'chip warn';
@@ -589,41 +604,36 @@ function renderStatus() {
 
 function recordRow(r) {
   const d = new Date(r.ts);
-  const badge = r.inRange ? '' : '<span class="chip warn">นอกพื้นที่</span>';
-  const mock = (r.mock ? '<span class="chip">ทดสอบ</span>' : '')
+  const chips = (r.mock ? '<span class="chip">ทดสอบ</span>' : '')
     + (r.editedAt ? '<span class="chip">แก้ไข</span>' : '')
     + (r.source === 'upload' ? '<span class="chip">อัปโหลด</span>' : '')
     + (settings.scriptUrl && (!r.synced || r.dirty) ? '<span class="chip">รอส่ง</span>' : '');
   return `<button class="row" data-id="${r.id}">
     <img class="thumb" src="${r.photo}" alt="">
     <div class="row-main">
-      <div class="row-title">${r.type === 'in' ? 'เข้างาน' : 'ออกงาน'} ${badge}${mock}</div>
-      <div class="row-sub">${esc(r.siteName)} · ${fmtDist(r.dist)}</div>
+      <div class="row-title" style="min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(placeOf(r))}</span> ${chips}</div>
+      <div class="row-sub">${r.note ? esc(r.note) : (r.inRange ? 'จุดที่บันทึกไว้' : `ห่างจาก ${esc(r.siteName)} ${fmtDist(r.dist)}`)}</div>
     </div>
     <div class="row-time">${hm(d)}</div>
   </button>`;
 }
 
+const placeOf = r => r.place || r.siteName || '';
+
 function renderToday() {
   const t = todayRecords();
-  const fin = t.find(r => r.type === 'in');
-  const lout = [...t].reverse().find(r => r.type === 'out');
-  $('#t-in').textContent  = fin ? hm(new Date(fin.ts)) : '–';
-  $('#t-out').textContent = lout ? hm(new Date(lout.ts)) : '–';
-  let total = 0, openIn = null;
-  t.forEach(r => { if (r.type === 'in') openIn = r.ts; else if (openIn) { total += r.ts - openIn; openIn = null; } });
-  if (openIn) total += Date.now() - openIn;
-  $('#t-dur').textContent = t.length ? fmtDur(total) : '–';
-  $('#t-dur').style.fontSize = '14px';
+  $('#t-count').textContent = t.length ? `${t.length} ครั้ง` : '–';
+  $('#t-first').textContent = t.length ? hm(new Date(t[0].ts)) : '–';
+  $('#t-last').textContent  = t.length ? hm(new Date(t[t.length - 1].ts)) : '–';
   $('#today-list').innerHTML = t.length
     ? [...t].reverse().map(recordRow).join('')
-    : '<div class="empty"><b>ยังไม่ได้ลงเวลาวันนี้</b>กดปุ่มด้านบนเพื่อถ่ายเซลฟี่เข้างาน</div>';
+    : '<div class="empty"><b>ยังไม่ได้เช็คอินวันนี้</b>กดปุ่มด้านบนเพื่อถ่ายเซลฟี่และบันทึกสถานที่</div>';
 }
 
 function renderHello() {
   $('#hello').innerHTML = profile.name
     ? `สวัสดี <b>${esc(profile.name)}</b>${profile.dept ? ' · ' + esc(profile.dept) : ''}`
-    : 'สวัสดี · <a href="#" id="go-profile" style="color:var(--accent);font-weight:600">ตั้งชื่อผู้ลงเวลา</a>';
+    : 'สวัสดี · <a href="#" id="go-profile" style="color:var(--accent);font-weight:600">ตั้งชื่อผู้เช็คอิน</a>';
   const g = $('#go-profile'); if (g) g.onclick = e => { e.preventDefault(); show('settings'); };
 }
 
@@ -631,11 +641,10 @@ function renderHello() {
 let stream = null, shotData = null, shotMeta = null;
 
 async function openCamera() {
-  if (!pos || !evalRes) return;
+  if (!pos) return;
   $('#cam').hidden = false; document.body.style.overflow = 'hidden';
   liveMode();
-  const nt = nextType();
-  $('#cam-tag').textContent = `${nt === 'in' ? 'เข้างาน' : 'ออกงาน'} · ${evalRes.site.name}`;
+  $('#cam-tag').textContent = `เช็คอิน · ${currentPlace()}`;
   const msg = $('#cam-msg');
   if (!navigator.mediaDevices?.getUserMedia) {
     msg.hidden = false; msg.textContent = 'เบราว์เซอร์นี้เปิดกล้องไม่ได้ ต้องเปิดผ่าน https หรือ localhost'; return;
@@ -671,8 +680,8 @@ function capture() {
   x.save(); x.translate(W, 0); x.scale(-1, 1);
   x.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, W, H); x.restore();
 
-  const now = new Date(), nt = nextType();
-  shotMeta = { ts: now.getTime(), type: nt, pos: { ...pos }, site: evalRes.site, dist: evalRes.dist, inRange: evalRes.inRange, source: 'camera' };
+  const now = new Date();
+  shotMeta = snapshotMeta(now.getTime(), 'camera');
 
   // แถบลายน้ำหลักฐาน
   const bandH = 236, y0 = H - bandH;
@@ -682,14 +691,14 @@ function capture() {
   const F = '"IBM Plex Sans Thai", Tahoma, sans-serif', M = '"IBM Plex Mono", Consolas, monospace';
   x.textBaseline = 'alphabetic';
   // pill สถานะ
-  const pill = nt === 'in' ? 'เข้างาน' : 'ออกงาน';
+  const pill = 'เช็คอิน';
   x.font = `700 26px ${F}`; const pw = x.measureText(pill).width + 32;
-  x.fillStyle = nt === 'in' ? '#5fc4b3' : '#ffffff'; roundRect(x, 28, y0 + 6, pw, 42, 21); x.fill();
+  x.fillStyle = '#5fc4b3'; roundRect(x, 28, y0 + 6, pw, 42, 21); x.fill();
   x.fillStyle = '#06201c'; x.fillText(pill, 44, y0 + 36);
   x.fillStyle = '#ffffff'; x.font = `600 56px ${M}`; x.fillText(hms(now), 28 + pw + 18, y0 + 46);
   x.font = `500 24px ${F}`; x.fillStyle = '#d7e7e3'; x.fillText(thDate.format(now), 28, y0 + 92);
-  x.font = `600 25px ${F}`; x.fillStyle = shotMeta.inRange ? '#8fe0b0' : '#f6c77f';
-  x.fillText(`${shotMeta.inRange ? '✓ ในพื้นที่' : '! นอกพื้นที่'} · ${fit(x, evalRes.site.name, W - 260)} · ${fmtDist(shotMeta.dist)}`, 28, y0 + 132);
+  x.font = `600 25px ${F}`; x.fillStyle = '#8fe0b0';
+  x.fillText(fit(x, `สถานที่: ${shotMeta.place}`, W - 56), 28, y0 + 132);
   x.font = `500 21px ${M}`; x.fillStyle = '#b9cdc8';
   x.fillText(`${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}  ±${pos.acc}m${pos.mock ? '  [TEST]' : ''}`, 28, y0 + 168);
   x.font = `500 22px ${F}`; x.fillStyle = '#ffffff';
@@ -704,9 +713,7 @@ function showPreview() {
   $('#cam-msg').hidden = true;
   $('#shot').src = shotData; $('#shot').hidden = false; $('#video').hidden = true; $('#guide').style.display = 'none';
   $('#live-ctl').hidden = true; $('#confirm-ctl').hidden = false;
-  $('#out-warn').hidden = shotMeta.inRange;
   $('#cam-note').value = '';
-  $('#cam-note').placeholder = shotMeta.inRange ? 'หมายเหตุ (ถ้ามี)' : 'หมายเหตุ (ถ้ามี) เช่น ประชุมนอกสถานที่';
 }
 
 // ผู้ดูแล: ใช้รูปจากเครื่องแทนการถ่ายสด (ครอปเป็น 3:4 ไม่ใส่ลายน้ำ)
@@ -719,12 +726,17 @@ function useUploadedPhoto(file) {
     let sw = iw, sh = ih; if (iw / ih > target) sw = ih * target; else sh = iw / target;
     c.getContext('2d').drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, W, H);
     URL.revokeObjectURL(url);
-    shotMeta = { ts: Date.now(), type: nextType(), pos: { ...pos }, site: evalRes.site, dist: evalRes.dist, inRange: evalRes.inRange, source: 'upload' };
+    shotMeta = snapshotMeta(Date.now(), 'upload');
     shotData = c.toDataURL('image/jpeg', 0.8);
     stopCamera(); showPreview();
   };
   img.onerror = () => { URL.revokeObjectURL(url); toast('เปิดไฟล์รูปนี้ไม่ได้ ลองเลือกไฟล์ JPG หรือ PNG'); };
   img.src = url;
+}
+
+function snapshotMeta(ts, source) {
+  return { ts, pos: { ...pos }, place: currentPlace(), site: evalRes ? evalRes.site : null,
+    dist: evalRes ? evalRes.dist : null, inRange: !!(evalRes && evalRes.inRange), source };
 }
 
 function roundRect(x, X, Y, w, h, r) { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); }
@@ -734,9 +746,10 @@ function confirmShot() {
   if (!shotData || !shotMeta) return;
   const note = $('#cam-note').value.trim();
   const r = {
-    id: uid(), type: shotMeta.type, ts: shotMeta.ts,
+    id: uid(), type: 'checkin', ts: shotMeta.ts, place: shotMeta.place,
     lat: shotMeta.pos.lat, lng: shotMeta.pos.lng, acc: shotMeta.pos.acc, mock: !!shotMeta.pos.mock,
-    siteId: shotMeta.site.id, siteName: shotMeta.site.name, dist: Math.round(shotMeta.dist), inRange: shotMeta.inRange,
+    siteId: shotMeta.site ? shotMeta.site.id : '', siteName: shotMeta.site ? shotMeta.site.name : '',
+    dist: shotMeta.dist == null ? null : Math.round(shotMeta.dist), inRange: shotMeta.inRange,
     note, photo: shotData, source: shotMeta.source, name: profile.name, empId: profile.empId, ua: navigator.userAgent
   };
   records.push(r);
@@ -745,7 +758,7 @@ function confirmShot() {
     records.pop(); toast('พื้นที่เก็บข้อมูลในเครื่องเต็ม ส่งออก CSV แล้วล้างประวัติเก่าก่อน'); return;
   }
   closeCamera(); renderAll();
-  toast(saved ? `บันทึก${r.type === 'in' ? 'เข้างาน' : 'ออกงาน'}แล้ว ${hm(new Date(r.ts))} น.` : 'บันทึกชั่วคราวเท่านั้น เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล');
+  toast(saved ? `เช็คอินแล้ว ${hm(new Date(r.ts))} น.` : 'บันทึกชั่วคราวเท่านั้น เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล');
   syncAll();
 }
 
@@ -767,8 +780,8 @@ async function postSheet(payload) {
 function sheetRow(r) {
   const d = new Date(r.ts);
   return {
-    id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : 'ออกงาน',
-    name: r.name || '', empId: r.empId || '', site: r.siteName, dist: r.dist, inRange: r.inRange ? 'ใช่' : 'ไม่',
+    id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : r.type === 'out' ? 'ออกงาน' : 'เช็คอิน',
+    name: r.name || '', empId: r.empId || '', site: placeOf(r), dist: r.dist ?? '', inRange: r.inRange ? 'ใช่' : 'ไม่',
     lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '', source: r.source === 'upload' ? 'อัปโหลด' : 'กล้อง',
     editedAt: r.editedAt ? `${dayKey(new Date(r.editedAt))} ${hms(new Date(r.editedAt))}` : '',
     origTime: r.origTs ? `${dayKey(new Date(r.origTs))} ${hms(new Date(r.origTs))}` : ''
@@ -820,7 +833,7 @@ function renderHistory() {
   if (histFilter === 'out') list = list.filter(r => !r.inRange);
   if (histFilter === 'month') list = list.filter(r => { const d = new Date(r.ts); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
   $('#hist-count').textContent = `${list.length} รายการ`;
-  if (!list.length) { $('#hist-list').innerHTML = '<div class="empty"><b>ไม่มีรายการ</b>รายการที่ลงเวลาจะแสดงที่นี่พร้อมรูปและพิกัด</div>'; return; }
+  if (!list.length) { $('#hist-list').innerHTML = '<div class="empty"><b>ไม่มีรายการ</b>รายการเช็คอินจะแสดงที่นี่พร้อมรูปและพิกัด</div>'; return; }
   let html = '', last = '';
   list.forEach(r => {
     const k = dayKey(new Date(r.ts));
@@ -835,18 +848,17 @@ function openDetail(id) {
   const d = new Date(r.ts);
   $('#detail-card').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <b style="font-size:18px">${r.type === 'in' ? 'เข้างาน' : 'ออกงาน'} <span class="num">${hms(d)}</span></b>
+      <b style="font-size:18px">เช็คอิน <span class="num">${hms(d)}</span></b>
       <button class="btn sm" id="detail-close">ปิด</button>
     </div>
-    <img src="${r.photo}" alt="รูปหลักฐานการลงเวลา">
+    <img src="${r.photo}" alt="รูปเช็คอิน">
     <dl class="kv">
       <dt>วันที่</dt><dd>${thDate.format(d)}</dd>
-      <dt>จุดทำงาน</dt><dd>${esc(r.siteName)}</dd>
-      <dt>สถานะ</dt><dd>${r.inRange ? '<span class="chip ok"><span class="dot"></span>ในพื้นที่</span>' : '<span class="chip warn"><span class="dot"></span>นอกพื้นที่</span>'} ${r.mock ? '<span class="chip">ทดสอบ</span>' : ''}</dd>
-      <dt>ระยะ</dt><dd class="num">${fmtDist(r.dist)}</dd>
+      <dt>สถานที่</dt><dd>${esc(placeOf(r))} ${r.mock ? '<span class="chip">ทดสอบ</span>' : ''}</dd>
+      ${r.siteName ? `<dt>${r.inRange ? 'จุดที่บันทึกไว้' : 'จุดใกล้สุด'}</dt><dd>${esc(r.siteName)} · <span class="num">${fmtDist(r.dist)}</span></dd>` : ''}
       <dt>พิกัด</dt><dd class="num">${r.lat.toFixed(6)}, ${r.lng.toFixed(6)} (±${r.acc} ม.)</dd>
       ${r.note ? `<dt>หมายเหตุ</dt><dd>${esc(r.note)}</dd>` : ''}
-      <dt>ผู้ลงเวลา</dt><dd>${esc([r.name, r.empId].filter(Boolean).join(' · ') || '–')}</dd>
+      <dt>ผู้เช็คอิน</dt><dd>${esc([r.name, r.empId].filter(Boolean).join(' · ') || '–')}</dd>
     </dl>
     ${r.origTs ? `<div class="note">แก้ไขเวลาจากเดิม ${thShort.format(new Date(r.origTs))} ${hms(new Date(r.origTs))} · รูปยังแสดงเวลาที่ถ่ายจริง</div>` : ''}
     <div class="btns">
@@ -862,23 +874,15 @@ function openDetail(id) {
 function openEdit(id) {
   const r = records.find(x => x.id === id); if (!r) return;
   const d = new Date(r.ts);
-  const siteOpts = sites.map(s => `<option value="${s.id}" ${s.id === r.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')
-    + (sites.some(s => s.id === r.siteId) ? '' : `<option value="" selected>${esc(r.siteName)}</option>`);
   $('#detail-card').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <b style="font-size:18px">แก้ไขรายการ</b>
       <button class="btn sm" id="edit-back">ยกเลิก</button>
     </div>
     <form id="edit-form" style="display:flex;flex-direction:column;gap:12px">
-      <div class="field"><label>ประเภท</label>
-        <div class="seg" id="ed-type">
-          <button type="button" data-t="in" class="${r.type === 'in' ? 'on' : ''}">เข้างาน</button>
-          <button type="button" data-t="out" class="${r.type === 'out' ? 'on' : ''}">ออกงาน</button>
-        </div>
-      </div>
       <div class="field"><label for="ed-ts">วันและเวลา</label>
         <input class="input num" type="datetime-local" step="1" id="ed-ts" value="${dayKey(d)}T${hms(d)}" required></div>
-      <div class="field"><label for="ed-site">จุดทำงาน</label><select class="input" id="ed-site">${siteOpts}</select></div>
+      <div class="field"><label>สถานที่</label><div class="note">${esc(placeOf(r))}</div></div>
       <div class="field"><label for="ed-note">หมายเหตุ</label><textarea class="input" id="ed-note" rows="2">${esc(r.note)}</textarea></div>
       <div class="btns">
         <button type="button" class="btn danger" id="ed-del">ลบรายการ</button>
@@ -886,8 +890,6 @@ function openEdit(id) {
         <button type="submit" class="btn primary">บันทึกการแก้ไข</button>
       </div>
     </form>`;
-  let type = r.type;
-  $('#ed-type').onclick = e => { const b = e.target.closest('button'); if (!b) return; type = b.dataset.t; $('#ed-type').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
   $('#edit-back').onclick = () => openDetail(id);
   $('#ed-del').onclick = e => {
     const b = e.currentTarget;
@@ -901,11 +903,7 @@ function openEdit(id) {
     const ts = new Date($('#ed-ts').value).getTime();
     if (isNaN(ts)) { toast('วันและเวลาไม่ถูกต้อง'); return; }
     if (ts !== r.ts && !r.origTs) r.origTs = r.ts;
-    r.ts = ts; r.type = type; r.note = $('#ed-note').value.trim();
-    const s = sites.find(x => x.id === $('#ed-site').value);
-    if (s && s.id !== r.siteId) {
-      r.siteId = s.id; r.siteName = s.name; r.dist = Math.round(haversine(r, s)); r.inRange = r.dist <= s.radius;
-    }
+    r.ts = ts; r.note = $('#ed-note').value.trim();
     r.editedAt = Date.now(); if (r.synced) r.dirty = true;
     persistRecords(); renderAll(); openDetail(id); toast('บันทึกการแก้ไขแล้ว'); syncAll();
   };
@@ -913,11 +911,11 @@ function openEdit(id) {
 
 function exportCSV() {
   if (!records.length) { toast('ยังไม่มีรายการให้ส่งออก'); return; }
-  const head = ['วันที่', 'เวลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'จุดทำงาน', 'ระยะ(ม.)', 'ในพื้นที่', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ(ม.)', 'หมายเหตุ', 'ทดสอบ'];
+  const head = ['วันที่', 'เวลา', 'ชื่อ', 'รหัสพนักงาน', 'สถานที่', 'จุดใกล้สุด', 'ระยะ(ม.)', 'อยู่ในจุดที่บันทึก', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ(ม.)', 'หมายเหตุ', 'ทดสอบ'];
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = [...records].sort((a, b) => a.ts - b.ts).map(r => {
     const d = new Date(r.ts);
-    return [dayKey(d), hms(d), r.type === 'in' ? 'เข้างาน' : 'ออกงาน', r.name, r.empId, r.siteName, r.dist, r.inRange ? 'ใช่' : 'ไม่', r.lat, r.lng, r.acc, r.note, r.mock ? 'ใช่' : ''].map(q).join(',');
+    return [dayKey(d), hms(d), r.name, r.empId, placeOf(r), r.siteName, r.dist, r.inRange ? 'ใช่' : 'ไม่', r.lat, r.lng, r.acc, r.note, r.mock ? 'ใช่' : ''].map(q).join(',');
   });
   const blob = new Blob(['﻿' + [head.map(q).join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -957,7 +955,7 @@ function renderSites(fit) {
         <button class="btn sm" data-edit="${s.id}">แก้ไข</button>
         <button class="btn sm danger" data-del="${s.id}">ลบ</button>
       </div>
-    </div>`).join('') : '<div class="empty"><b>ยังไม่มีจุดทำงาน</b>เพิ่มอย่างน้อยหนึ่งจุดเพื่อเริ่มลงเวลา</div>';
+    </div>`).join('') : '<div class="empty"><b>ยังไม่มีจุดทำงาน</b>เช็คอินได้ตามปกติ สถานที่จะเป็นชื่อ ตำบล อำเภอ จังหวัด</div>';
 }
 
 function resetSiteForm() {
@@ -981,7 +979,7 @@ function show(pg) {
 
 function renderSettings() {
   $('#pf-name').value = profile.name; $('#pf-id').value = profile.empId; $('#pf-dept').value = profile.dept;
-  $('#set-demo').checked = settings.demo; $('#set-allow-out').checked = settings.allowOut;
+  $('#set-demo').checked = settings.demo;
   $('#gs-url').value = settings.scriptUrl || ''; $('#gs-token').value = settings.token || ''; renderSyncNote();
   let kb = 0; try { kb = Math.round((localStorage.getItem('ci.records') || '').length / 1024); } catch {}
   $('#storage-note').textContent = `เก็บไว้ในเบราว์เซอร์เครื่องนี้ ${records.length} รายการ (ประมาณ ${kb.toLocaleString('th-TH')} KB) ส่งออก CSV จากแท็บประวัติเป็นระยะเพื่อสำรองข้อมูล`;
@@ -1040,7 +1038,7 @@ $('#site-list').onclick = e => {
 $('#profile-form').onsubmit = e => {
   e.preventDefault();
   profile = { name: $('#pf-name').value.trim(), empId: $('#pf-id').value.trim(), dept: $('#pf-dept').value.trim() };
-  store.set('ci.profile', profile); renderHello(); toast('บันทึกข้อมูลผู้ลงเวลาแล้ว');
+  store.set('ci.profile', profile); renderHello(); toast('บันทึกข้อมูลผู้เช็คอินแล้ว');
 };
 const readSheetForm = () => {
   settings.scriptUrl = $('#gs-url').value.trim(); settings.token = $('#gs-token').value.trim();
@@ -1062,12 +1060,11 @@ $('#gs-sync').onclick = async () => {
 };
 window.addEventListener('online', syncAll);
 $('#set-demo').onchange =e => { settings.demo = e.target.checked; store.set('ci.settings', settings); pos = null; startGeo(); renderStatus(); };
-$('#set-allow-out').onchange = e => { settings.allowOut = e.target.checked; store.set('ci.settings', settings); renderStatus(); };
 $('#clear-data').onclick = e => {
   const b = e.currentTarget;
-  if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อยืนยันการล้าง'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ล้างประวัติการลงเวลา'; }, 3500); return; }
+  if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อยืนยันการล้าง'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ล้างประวัติการเช็คอิน'; }, 3500); return; }
   records = []; store.set('ci.records', records); renderAll(); renderSettings(); toast('ล้างประวัติแล้ว');
-  b.classList.remove('armed'); b.textContent = 'ล้างประวัติการลงเวลา';
+  b.classList.remove('armed'); b.textContent = 'ล้างประวัติการเช็คอิน';
 };
 
 /* ---------- boot ---------- */
