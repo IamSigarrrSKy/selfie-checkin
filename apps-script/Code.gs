@@ -10,7 +10,7 @@ const LOG = 'ลงเวลา', DAILY = 'สรุปรายวัน', MONT
 
 const HEADERS = ['ID', 'วันที่', 'เวลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'จุดทำงาน', 'ระยะ (ม.)', 'ในพื้นที่',
   'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ (ม.)', 'หมายเหตุ', 'รูป', 'ทดสอบ', 'บันทึกเมื่อ', 'แก้ไขเมื่อ', 'เวลาเดิมก่อนแก้',
-  'ภาค', 'ลิงก์รูป'];
+  'ภาค', 'ลิงก์รูป', 'ที่มารูป'];
 const COL_CREATED = 16, COL_REGION = 19, COL_PHOTO_URL = 20;
 
 // แต่ละภาคมีแท็บของตัวเอง ระบบจัดรายการเข้าภาคตามจุดทำงาน (หรือชื่อจังหวัดในชื่อจุด ถ้าเพิ่มจุดใหม่ในแอป)
@@ -95,7 +95,7 @@ function toRow(r, photoUrl, created) {
   const photo = photoUrl ? '=HYPERLINK("' + photoUrl + '","ดูรูป")' : '';
   return [r.id, r.date, r.time, r.type, r.name, r.empId, r.site, r.dist, r.inRange,
     r.lat, r.lng, r.acc, r.note, photo, r.mock, created, "", "",   // ไม่บันทึกประวัติการแก้ไขลง Sheet
-    regionOf(r.site), photoUrl || ''];
+    regionOf(r.site), photoUrl || '', r.source || 'กล้อง'];
 }
 
 function findRow(sh, id) {
@@ -179,7 +179,7 @@ function buildLog(ss) {
   styleHeader(sh, 1, n);
   sh.setFrozenColumns(3);
 
-  const widths = [70, 95, 75, 75, 140, 95, 260, 70, 70, 90, 90, 90, 220, 70, 60, 140, 140, 140, 170, 120];
+  const widths = [70, 95, 75, 75, 140, 95, 260, 70, 70, 90, 90, 90, 220, 70, 60, 140, 140, 140, 170, 120, 90];
   widths.forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.hideColumns(1);               // ID ใช้อ้างอิงตอนแก้ไขจากแอป ไม่ต้องเห็น
   sh.hideColumns(COL_PHOTO_URL);   // URL รูปแบบเต็ม ใช้ทำลิงก์ในแท็บภาค
