@@ -169,7 +169,7 @@ function buildLog(ss) {
   sh.getRange(2, 8, rows, 2).setHorizontalAlignment('center');
   sh.getRange(2, 14, rows, 2).setHorizontalAlignment('center');
   sh.getRange(2, 13, rows, 1).setWrap(true);
-  band(sh, sh.getRange(1, 1, sh.getMaxRows(), n));
+  band(sh, sh.getRange(2, 1, rows, n));
 
   const all = sh.getRange(2, 1, rows, n);
   sh.setConditionalFormatRules([
@@ -215,7 +215,7 @@ function buildDaily(ss) {
   sh.getRange(2, 3, rows, 5).setHorizontalAlignment('center');
   sh.getRange(2, 8, rows, 1).setWrap(true);
   [130, 260, 80, 80, 100, 90, 70, 280].forEach((w, i) => sh.setColumnWidth(i + 1, w));
-  band(sh, sh.getRange(1, 1, sh.getMaxRows(), head.length));
+  band(sh, sh.getRange(2, 1, rows, head.length));
 
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('นอกพื้นที่')
@@ -261,7 +261,7 @@ function buildMonthly(ss) {
   sh.getRange(5, 2, rows, 5).setHorizontalAlignment('center');
   sh.getRange(5, 7, rows, 1).setWrap(true);
   [140, 110, 110, 100, 110, 110, 320].forEach((w, i) => sh.setColumnWidth(i + 1, w));
-  band(sh, sh.getRange(4, 1, sh.getMaxRows() - 3, head.length));
+  band(sh, sh.getRange(5, 1, rows, head.length));
   return sh;
 }
 
@@ -280,6 +280,6 @@ function buildSites(ss) {
   [300, 100, 100, 100, 90, 100].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.getRange(rows.length + 3, 1).setValue('รายการนี้ใช้อ้างอิงเท่านั้น การเพิ่มหรือแก้จุดทำงานให้ทำในแท็บ "จุดทำงาน" ของแอป')
     .setFontColor(C.muted).setFontStyle('italic');
-  band(sh, sh.getRange(1, 1, rows.length + 1, head.length));
+  band(sh, sh.getRange(2, 1, rows.length, head.length));
   return sh;
 }
