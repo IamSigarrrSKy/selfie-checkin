@@ -772,9 +772,19 @@ async function postSheet(payload) {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // simple request: ไม่มี CORS preflight
     body: JSON.stringify({ ...payload, token: settings.token || '' })
   });
-  const j = await res.json();
+  const j = parseReply(await res.text());
   if (!j.ok) throw new Error(j.error || 'ส่งข้อมูลไม่สำเร็จ');
   return j;
+}
+
+// บางครั้ง Google ห่อคำตอบ JSON ไว้ในหน้า HTML: ดึง JSON ออกจากข้อความในหน้า
+function parseReply(txt) {
+  try { return JSON.parse(txt); } catch { /* ไม่ใช่ JSON ล้วน */ }
+  const doc = new DOMParser().parseFromString(txt, 'text/html');
+  doc.querySelectorAll('script,style').forEach(s => s.remove());
+  const m = (doc.body ? doc.body.textContent : '').match(/\{"ok"[\s\S]*\}/);
+  if (m) return JSON.parse(m[0]);
+  throw new Error('Google Sheet ตอบกลับผิดรูปแบบ');
 }
 
 function sheetRow(r) {
