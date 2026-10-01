@@ -6,11 +6,12 @@ const SHEET_ID    = '';   // เว้นว่างได้ถ้าเปิ
 const TOKEN       = '';   // ตั้งรหัสลับได้ ต้องกรอกให้ตรงกันในหน้าตั้งค่าของแอป
 const FOLDER_NAME = 'รูปเช็คอินเซลฟี่';
 
-const LOG = 'เช็คอิน', LEGACY_LOG = 'ลงเวลา', DAILY = 'สรุปรายวัน', MONTHLY = 'สรุปรายเดือน', SITES = 'จุดทำงาน';
+const LOG = 'เช็คอิน', LEGACY_LOG = 'ลงเวลา', DAILY = 'สรุปรายวัน', MONTHLY = 'สรุปรายเดือน', SITES = 'จุดทำงาน',
+  LEAVE = 'การลา', LEAVE_SUM = 'สรุปการลา';
 
 const HEADERS = ['ID', 'วันที่', 'เวลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'สถานที่', 'ระยะจากจุดใกล้สุด (ม.)', 'อยู่ในจุดที่บันทึก',
   'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ (ม.)', 'หมายเหตุ', 'รูป', 'ทดสอบ', 'บันทึกเมื่อ', 'แก้ไขเมื่อ', 'เวลาเดิมก่อนแก้',
-  'ภาค', 'ลิงก์รูป', 'ที่มารูป'];
+  'ภาค', 'ลิงก์รูป'];
 const COL_CREATED = 16, COL_REGION = 19, COL_PHOTO_URL = 20;
 
 // แต่ละภาคมีแท็บของตัวเอง ระบบจัดรายการเข้าภาคตามจุดทำงาน (หรือชื่อจังหวัดในชื่อจุด ถ้าเพิ่มจุดใหม่ในแอป)
@@ -54,6 +55,8 @@ function doPost(e) {
     const sh = logSheet();
 
     if (req.action === 'ping') return out({ ok: true, sheet: sh.getParent().getName() + ' / ' + sh.getName() });
+    if (req.action === 'leave_add') return out(addLeave(req.leave));
+    if (req.action === 'leave_delete') return out(deleteLeave(req.id));
 
     if (req.action === 'add') {
       const r = req.record;
@@ -104,7 +107,7 @@ function toRow(r, photoUrl, created) {
   const photo = photoUrl ? '=HYPERLINK("' + photoUrl + '","ดูรูป")' : '';
   return [r.id, dateSerial(r.date), timeSerial(r.time), r.type, r.name, r.empId, r.site, r.dist, r.inRange,
     r.lat, r.lng, r.acc, r.note, photo, r.mock, created, "", "",   // ไม่บันทึกประวัติการแก้ไขลง Sheet
-    regionOf(r.site), photoUrl || '', r.source || 'กล้อง'];
+    regionOf(r.site), photoUrl || ''];
 }
 
 function findRow(sh, id) {
@@ -143,12 +146,14 @@ function setup() {
   buildDaily(ss);
   buildMonthly(ss);
   buildSites(ss);
+  buildLeave(ss);
+  buildLeaveSummary(ss);
   const regionNames = REGIONS.map(r => r.name).concat([OTHER_REGION]);
   regionNames.forEach(name => buildRegion(ss, name));
   getFolder();
 
-  // เรียงแท็บ: สรุปรายเดือน → สรุปรายวัน → แต่ละภาค → เช็คอิน → จุดทำงาน
-  const order = [MONTHLY, DAILY].concat(regionNames, [LOG, SITES]);
+  // เรียงแท็บ: สรุปรายเดือน → สรุปรายวัน → สรุปการลา → แต่ละภาค → เช็คอิน → การลา → จุดทำงาน
+  const order = [MONTHLY, DAILY, LEAVE_SUM].concat(regionNames, [LOG, LEAVE, SITES]);
   order.forEach((name, i) => { ss.setActiveSheet(ss.getSheetByName(name)); ss.moveActiveSheet(i + 1); });
   // ลบชีตว่างเริ่มต้น (Sheet1 / แผ่น1)
   ss.getSheets().forEach(s => {
@@ -190,7 +195,7 @@ function buildLog(ss) {
   styleHeader(sh, 1, n);
   sh.setFrozenColumns(3);
 
-  const widths = [70, 95, 75, 75, 140, 95, 260, 70, 70, 90, 90, 90, 220, 70, 60, 140, 140, 140, 170, 120, 90];
+  const widths = [70, 95, 75, 75, 140, 95, 260, 70, 70, 90, 90, 90, 220, 70, 60, 140, 140, 140, 170, 120];
   widths.forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.hideColumns(1);               // ID ใช้อ้างอิงตอนแก้ไขจากแอป ไม่ต้องเห็น
   sh.hideColumns(COL_PHOTO_URL);   // URL รูปแบบเต็ม ใช้ทำลิงก์ในแท็บภาค
@@ -346,6 +351,93 @@ function buildRegion(ss, name) {
   [130, 70, 320, 260, 70, 90].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(6, 1, rows, head.length));
   sh.setConditionalFormatRules([]);
+  return sh;
+}
+
+/* ---------- การลา: หนึ่งแถวต่อหนึ่งวันลา (ID เดียวกันสำหรับการลาครั้งเดียวกัน) ---------- */
+const LEAVE_HEADERS = ['ID', 'วันที่ลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'หมายเหตุ', 'แจ้งเมื่อ'];
+
+function leaveSheet() {
+  return book().getSheetByName(LEAVE) || buildLeave(book());
+}
+
+function addLeave(l) {
+  const sh = leaveSheet();
+  if (findRow(sh, l.id)) return { ok: true, duplicate: true };
+  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, l.name, l.empId, l.note, l.created]);
+  if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
+  return { ok: true };
+}
+
+function deleteLeave(id) {
+  const sh = leaveSheet(), n = sh.getLastRow() - 1;
+  if (n < 1) return { ok: true };
+  const ids = sh.getRange(2, 1, n, 1).getValues();
+  for (let i = ids.length - 1; i >= 0; i--) if (String(ids[i][0]) === String(id)) sh.deleteRow(i + 2);
+  return { ok: true };
+}
+
+function buildLeave(ss) {
+  const sh = sheet(ss, LEAVE), n = LEAVE_HEADERS.length;
+  trimColumns(sh, n);
+  sh.getRange(1, 1, 1, n).setValues([LEAVE_HEADERS]);
+  styleHeader(sh, 1, n);
+  sh.hideColumns(1);
+  const rows = sh.getMaxRows() - 1;
+  sh.getRange(2, 2, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
+  sh.getRange(2, 3, rows, 1).setHorizontalAlignment('center');
+  sh.getRange(2, 6, rows, 1).setWrap(true);
+  [70, 140, 100, 160, 110, 260, 150].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  band(sh, sh.getRange(2, 1, rows, n));
+  sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาป่วย')
+      .setFontColor('#b4282f').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาพักผ่อน')
+      .setFontColor('#0e5a52').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build()
+  ]);
+  return sh;
+}
+
+/* ---------- สรุปการลารายเดือน ---------- */
+function buildLeaveSummary(ss) {
+  const sh = sheet(ss, LEAVE_SUM);
+  sh.clear();
+  sh.getBandings().forEach(b => b.remove());
+  const V = "'" + LEAVE + "'!";
+  const head = ['เดือน', 'ลาป่วย', 'ลาพักผ่อน', 'รวม', 'วันที่ลา'];
+  trimColumns(sh, head.length);
+  sh.setTabColor('#b4282f');
+
+  sh.getRange('A1').setValue('สรุปการลารายเดือน').setFontSize(16).setFontWeight('bold').setFontColor(C.title);
+  sh.setRowHeight(1, 34);
+  const yr = (type) => 'COUNTIFS(' + V + 'B2:B,">="&DATE(YEAR(TODAY()),1,1),' + V + 'B2:B,"<="&DATE(YEAR(TODAY()),12,31),' + V + 'C2:C,"' + type + '")';
+  sh.getRange('A2').setFormula('="ปีนี้ · ลาป่วย "&' + yr('ลาป่วย') + '&" วัน · ลาพักผ่อน "&' + yr('ลาพักผ่อน') + '&" วัน"')
+    .setFontColor(C.muted);
+
+  sh.getRange(4, 1, 1, head.length).setValues([head]);
+  styleHeader(sh, 4, head.length);
+
+  const inM = 'B2:B,">="&m,' + V + 'B2:B,"<="&EOMONTH(m,0)';
+  const days = (type) => 'IFERROR("' + type.replace('ลา', '') + ' "&TEXTJOIN(", ",TRUE,ARRAYFORMULA(TEXT(SORT(FILTER(' + V + 'B2:B,' +
+    V + 'B2:B>=m,' + V + 'B2:B<=EOMONTH(m,0),' + V + 'C2:C="' + type + '")),"d"))),"")';
+  sh.getRange('A5').setFormula('=IFERROR(SORT(UNIQUE(FILTER(ARRAYFORMULA(EOMONTH(' + V + 'B2:B,-1)+1),' + V + 'B2:B<>"")),1,FALSE),)');
+  sh.getRange('B5').setFormula('=MAP(A5:A,LAMBDA(m,IF(m="",,COUNTIFS(' + V + inM + ',' + V + 'C2:C,"ลาป่วย"))))');
+  sh.getRange('C5').setFormula('=MAP(A5:A,LAMBDA(m,IF(m="",,COUNTIFS(' + V + inM + ',' + V + 'C2:C,"ลาพักผ่อน"))))');
+  sh.getRange('D5').setFormula('=MAP(B5:B,C5:C,LAMBDA(s,v,IF(AND(s="",v=""),,s+v)))');
+  sh.getRange('E5').setFormula('=MAP(A5:A,LAMBDA(m,IF(m="",,TRIM(' + days('ลาป่วย') + '&"   "&' + days('ลาพักผ่อน') + '))))');
+
+  const rows = sh.getMaxRows() - 4;
+  sh.getRange(5, 1, rows, 1).setNumberFormat('mmmm yyyy').setHorizontalAlignment('left');
+  sh.getRange(5, 2, rows, 3).setNumberFormat('0 "วัน"').setHorizontalAlignment('center');
+  sh.getRange(5, 5, rows, 1).setWrap(true);
+  [140, 100, 110, 90, 380].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  band(sh, sh.getRange(5, 1, rows, head.length));
+  sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0)
+      .setFontColor('#b4282f').setBold(true).setRanges([sh.getRange(5, 2, rows, 1)]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0)
+      .setFontColor('#0e5a52').setBold(true).setRanges([sh.getRange(5, 3, rows, 1)]).build()
+  ]);
   return sh;
 }
 

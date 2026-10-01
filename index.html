@@ -93,6 +93,17 @@ button{cursor:pointer}
 .today{display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:4px 0}
 .today>div{padding:10px 14px;min-width:0}
 .today>div+div{border-left:1px solid var(--line)}
+.pin-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--line)}
+.leave-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.leave-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;background:var(--surface);box-shadow:var(--shadow)}
+.leave-btn b{font-size:17px}
+.leave-btn span{font-size:12.5px;color:var(--muted)}
+.leave-btn.sick b{color:var(--bad)}
+.leave-btn.vac b{color:var(--accent)}
+.month-nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.month-nav b{font-size:16px}
+.chip.sick{background:var(--bad-soft);color:var(--bad)}
+.chip.vac{background:var(--accent-soft);color:var(--accent)}
 .today .val{font-family:var(--mono);font-size:18px}
 .sec-title{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.03em;display:flex;justify-content:space-between;align-items:center}
 
@@ -197,6 +208,7 @@ button{cursor:pointer}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
         <span class="chip" id="admin-chip" hidden>ผู้ดูแล</span>
+        <span class="chip" id="leave-chip" hidden></span>
         <span class="chip" id="mode-chip" hidden><span class="dot"></span>โหมดทดสอบ</span>
       </div>
     </div>
@@ -210,6 +222,10 @@ button{cursor:pointer}
         </div>
       </div>
       <div class="map" id="map-home"></div>
+      <div class="pin-bar">
+        <button type="button" class="btn sm" id="pin-toggle">ปักหมุดเอง</button>
+        <span class="note" id="pin-note"></span>
+      </div>
       <div class="loc-meta">
         <div><div class="lbl" id="m-dist-lbl">จุดใกล้สุด</div><div class="val num" id="m-dist">–</div></div>
         <div><div class="lbl">พิกัด</div><div class="val num" id="m-coord">–</div></div>
@@ -250,6 +266,45 @@ button{cursor:pointer}
       </button>
     </div>
     <div class="card list" id="hist-list"></div>
+  </section>
+
+  <!-- ===== ลา ===== -->
+  <section class="page" id="pg-leave" hidden>
+    <div class="top">
+      <div><div class="clock" style="font-family:var(--font);font-size:26px">การลา</div>
+      <div class="date">แจ้งลาป่วยหรือลาพักผ่อน ระบบนับวันแยกเป็นรายเดือน</div></div>
+    </div>
+    <div class="leave-actions">
+      <button class="leave-btn sick" data-leave="sick"><b>ลาป่วย</b><span>แจ้งวันที่ป่วย</span></button>
+      <button class="leave-btn vac" data-leave="vacation"><b>ลาพักผ่อน</b><span>แจ้งวันหยุดพักผ่อน</span></button>
+    </div>
+
+    <form class="card form" id="leave-form" hidden autocomplete="off">
+      <div class="sec-title" id="leave-form-title" style="margin:0">ลาป่วย</div>
+      <div class="grid2">
+        <div class="field"><label for="lv-from">ตั้งแต่วันที่</label><input class="input num" type="date" id="lv-from" required></div>
+        <div class="field"><label for="lv-to">ถึงวันที่</label><input class="input num" type="date" id="lv-to" required></div>
+      </div>
+      <label class="switch" for="lv-skip" style="padding:0">
+        <div class="note">ไม่นับวันเสาร์-อาทิตย์</div>
+        <input type="checkbox" id="lv-skip" checked>
+      </label>
+      <div class="field"><label for="lv-note">หมายเหตุ</label><textarea class="input" id="lv-note" rows="2" placeholder="เช่น ไข้หวัด, ไปต่างจังหวัด"></textarea></div>
+      <div class="note" id="lv-count"></div>
+      <div class="btns"><button type="button" class="btn" id="lv-cancel">ยกเลิก</button><span style="flex:1"></span><button type="submit" class="btn primary" id="lv-save">บันทึกการลา</button></div>
+    </form>
+
+    <div class="month-nav">
+      <button class="btn sm" id="lv-prev" aria-label="เดือนก่อน">‹</button>
+      <b id="lv-month"></b>
+      <button class="btn sm" id="lv-next" aria-label="เดือนถัดไป">›</button>
+    </div>
+    <div class="card today">
+      <div><div class="lbl">ลาป่วย</div><div class="val" id="lv-sick">–</div></div>
+      <div><div class="lbl">ลาพักผ่อน</div><div class="val" id="lv-vac">–</div></div>
+      <div><div class="lbl">ทั้งปี ป่วย/พัก</div><div class="val" id="lv-year">–</div></div>
+    </div>
+    <div class="card list" id="leave-list"></div>
   </section>
 
   <!-- ===== จุดทำงาน ===== -->
@@ -331,6 +386,7 @@ button{cursor:pointer}
   <div class="nav-in">
     <button data-pg="home" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>เช็คอิน</button>
     <button data-pg="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>ประวัติ</button>
+    <button data-pg="leave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M9.5 15l2 2 3.5-4"/></svg>ลา</button>
     <button data-pg="sites" class="admin-only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>จุดทำงาน</button>
     <button data-pg="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>ตั้งค่า</button>
   </div>
@@ -410,6 +466,8 @@ let profile  = store.get('ci.profile', { name: '', empId: '', dept: '' });
 let settings = Object.assign({ demo: false, allowOut: true, scriptUrl: SHEET_URL_DEFAULT, token: '' }, store.get('ci.settings', {}));
 if (!settings.scriptUrl) settings.scriptUrl = SHEET_URL_DEFAULT;   // ค่าว่างที่เคยบันทึกไว้ ให้ใช้ URL ที่ฝังไว้แทน
 let pendingDeletes = store.get('ci.pendingDeletes', []);
+let leaves = store.get('ci.leaves', []);                 // { id, type, from, to, days[], note, createdAt, synced }
+let pendingLeaveDeletes = store.get('ci.pendingLeaveDeletes', []);
 
 // ลิงก์ผู้ดูแล: เปิดด้วย ?admin  (แก้จุดทำงาน/รัศมี อัปโหลดรูปจากเครื่อง โหมดทดสอบ การเชื่อม Sheet)
 const IS_ADMIN = new URLSearchParams(location.search).has('admin');
@@ -474,8 +532,8 @@ function initHomeMap() {
   L.tileLayer(TILE, { maxZoom: 19, attribution: ATTR }).addTo(homeMap);
   homeSiteLayer = L.layerGroup().addTo(homeMap);
   homeMap.on('click', e => {
-    if (!demoOn()) return;
-    setPos({ lat: e.latlng.lat, lng: e.latlng.lng, acc: 12, ts: Date.now(), mock: true });
+    if (!demoOn() && !manualPin) return;
+    placePin(e.latlng);
   });
   drawSites(homeSiteLayer);
 }
@@ -494,15 +552,32 @@ function updateHomeMap() {
   if (!homeMap || !pos) return;
   const ll = [pos.lat, pos.lng];
   if (!meMarker) {
-    meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000 }).addTo(homeMap);
+    meMarker = L.marker(ll, { icon: meIcon, zIndexOffset: 1000, draggable: true }).addTo(homeMap);
+    if (!manualPin && !demoOn()) meMarker.dragging.disable();
+    meMarker.on('dragend', () => placePin(meMarker.getLatLng()));
     accCircle = L.circle(ll, { radius: pos.acc, color: '#2a6cf0', weight: 1, fillOpacity: .08 }).addTo(homeMap);
   } else { meMarker.setLatLng(ll); accCircle.setLatLng(ll).setRadius(pos.acc); }
-  if (!fittedOnce || pos.mock) {
+  if (!fittedOnce) {
     fittedOnce = true;
     if (evalRes && evalRes.dist < 20000) {
       homeMap.fitBounds(L.latLngBounds([ll, [evalRes.site.lat, evalRes.site.lng]]).pad(.35), { maxZoom: 17 });
     } else homeMap.setView(ll, 16);
   }
+}
+
+// ปักหมุดเอง: แตะแผนที่หรือลากหมุดเพื่อเลือกตำแหน่งที่จะเช็คอิน
+let manualPin = false;
+function placePin(ll) {
+  setPos({ lat: ll.lat, lng: ll.lng, acc: 0, ts: Date.now(), mock: demoOn(), manual: manualPin });
+}
+function setManualPin(on) {
+  manualPin = on;
+  $('#pin-toggle').textContent = on ? 'ใช้ตำแหน่ง GPS' : 'ปักหมุดเอง';
+  $('#pin-toggle').classList.toggle('primary', on);
+  $('#pin-note').textContent = on ? 'แตะแผนที่หรือลากหมุดไปยังตำแหน่งที่ต้องการ' : '';
+  if (meMarker) { (on || demoOn()) ? meMarker.dragging.enable() : meMarker.dragging.disable(); }
+  if (on) { if (pos) placePin(pos); else if (homeMap) placePin(homeMap.getCenter()); }
+  else startGeo();
 }
 
 /* ---------- location ---------- */
@@ -517,7 +592,7 @@ function startGeo() {
   if (!('geolocation' in navigator)) { geoErr = 'อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง'; renderStatus(); return; }
   geoErr = null; renderStatus();
   watchId = navigator.geolocation.watchPosition(
-    p => { geoErr = null; setPos({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), ts: p.timestamp, mock: false }); },
+    p => { if (manualPin) return; geoErr = null; setPos({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), ts: p.timestamp, mock: false }); },
     e => {
       geoErr = e.code === 1 ? 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง เปิดสิทธิ์ Location ในการตั้งค่าเบราว์เซอร์แล้วโหลดหน้าใหม่'
              : e.code === 3 ? 'หาตำแหน่งไม่ทันเวลา ลองออกไปที่โล่งหรือเปิด GPS'
@@ -594,7 +669,7 @@ function renderStatus() {
   $('#m-dist-lbl').textContent = evalRes ? (evalRes.inRange ? 'ห่างจากจุด' : 'จุดใกล้สุด') : 'จุดใกล้สุด';
   $('#m-dist').textContent = evalRes ? fmtDist(evalRes.dist) : '–';
   $('#m-coord').textContent = pos ? `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}` : '–';
-  $('#m-acc').textContent  = pos ? `±${pos.acc} ม.` : '–';
+  $('#m-acc').textContent  = pos ? (pos.manual ? 'ปักหมุดเอง' : `±${pos.acc} ม.`) : '–';
 
   $('#cta').disabled = !canGo;
   $('#cta-hint').textContent = hint;
@@ -606,7 +681,6 @@ function recordRow(r) {
   const d = new Date(r.ts);
   const chips = (r.mock ? '<span class="chip">ทดสอบ</span>' : '')
     + (r.editedAt ? '<span class="chip">แก้ไข</span>' : '')
-    + (r.source === 'upload' ? '<span class="chip">อัปโหลด</span>' : '')
     + (settings.scriptUrl && (!r.synced || r.dirty) ? '<span class="chip">รอส่ง</span>' : '');
   return `<button class="row" data-id="${r.id}">
     <img class="thumb" src="${r.photo}" alt="">
@@ -622,6 +696,9 @@ const placeOf = r => r.place || r.siteName || '';
 
 function renderToday() {
   const t = todayRecords();
+  const lt = leaves.find(l => l.days.includes(dayKey(new Date())));
+  $('#leave-chip').hidden = !lt;
+  if (lt) { $('#leave-chip').textContent = `วันนี้${LEAVE_TYPES[lt.type]}`; $('#leave-chip').className = `chip ${lt.type === 'sick' ? 'sick' : 'vac'}`; }
   $('#t-count').textContent = t.length ? `${t.length} ครั้ง` : '–';
   $('#t-first').textContent = t.length ? hm(new Date(t[0].ts)) : '–';
   $('#t-last').textContent  = t.length ? hm(new Date(t[t.length - 1].ts)) : '–';
@@ -792,13 +869,14 @@ function sheetRow(r) {
   return {
     id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : r.type === 'out' ? 'ออกงาน' : 'เช็คอิน',
     name: r.name || '', empId: r.empId || '', site: placeOf(r), dist: r.dist ?? '', inRange: r.inRange ? 'ใช่' : 'ไม่',
-    lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '', source: r.source === 'upload' ? 'อัปโหลด' : 'กล้อง',
+    lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '',
     editedAt: r.editedAt ? `${dayKey(new Date(r.editedAt))} ${hms(new Date(r.editedAt))}` : '',
     origTime: r.origTs ? `${dayKey(new Date(r.origTs))} ${hms(new Date(r.origTs))}` : ''
   };
 }
 
-const pendingCount = () => records.filter(r => !r.synced || r.dirty).length + pendingDeletes.length;
+const pendingCount = () => records.filter(r => !r.synced || r.dirty).length + pendingDeletes.length
+  + leaves.filter(l => !l.synced).length + pendingLeaveDeletes.length;
 
 async function syncAll() {
   if (!settings.scriptUrl || syncing) { renderSyncNote(); return; }
@@ -819,10 +897,18 @@ async function syncAll() {
       }
       persistRecords();
     }
+    for (const id of [...pendingLeaveDeletes]) {
+      await postSheet({ action: 'leave_delete', id });
+      pendingLeaveDeletes = pendingLeaveDeletes.filter(x => x !== id); store.set('ci.pendingLeaveDeletes', pendingLeaveDeletes);
+    }
+    for (const l of leaves.filter(l => !l.synced)) {
+      await postSheet({ action: 'leave_add', leave: leaveRow(l) });
+      l.synced = true; persistLeaves();
+    }
   } catch (e) { err = e; }
   syncing = false;
   settings.lastSyncErr = err ? String(err.message || err) : '';
-  renderSyncNote(); renderToday(); if (!$('#pg-history').hidden) renderHistory();
+  renderSyncNote(); renderToday(); if (!$('#pg-history').hidden) renderHistory(); if (!$('#pg-leave').hidden) renderLeave();
   return !err;
 }
 
@@ -932,6 +1018,94 @@ function exportCSV() {
   a.download = `checkin-${dayKey(new Date())}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+/* ---------- การลา (ลาป่วย / ลาพักผ่อน) ---------- */
+const LEAVE_TYPES = { sick: 'ลาป่วย', vacation: 'ลาพักผ่อน' };
+const thMonth = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' });
+const thDayShort = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short' });
+const fmtDay = k => thDayShort.format(new Date(k + 'T00:00:00'));
+let leaveType = 'sick';
+let leaveMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
+const persistLeaves = () => store.set('ci.leaves', leaves);
+
+// วันลาทั้งหมดในช่วง (เป็น "YYYY-MM-DD") ตัดเสาร์-อาทิตย์ได้
+function leaveDays(from, to, skipWeekend) {
+  const out = [], a = new Date(from + 'T00:00:00'), b = new Date(to + 'T00:00:00');
+  if (isNaN(a) || isNaN(b) || b < a) return out;
+  for (const d = new Date(a); d <= b && out.length < 366; d.setDate(d.getDate() + 1)) {
+    const w = d.getDay();
+    if (skipWeekend && (w === 0 || w === 6)) continue;
+    out.push(dayKey(d));
+  }
+  return out;
+}
+
+function openLeaveForm(type) {
+  leaveType = type;
+  $('#leave-form-title').textContent = LEAVE_TYPES[type];
+  const t = dayKey(new Date());
+  $('#lv-from').value = t; $('#lv-to').value = t; $('#lv-note').value = '';
+  $('#leave-form').hidden = false; updateLeaveCount();
+  $('#leave-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function updateLeaveCount() {
+  const n = leaveDays($('#lv-from').value, $('#lv-to').value, $('#lv-skip').checked).length;
+  $('#lv-count').textContent = n ? `รวม ${n} วัน` : 'ช่วงวันที่ไม่ถูกต้อง หรือไม่มีวันทำงานในช่วงนี้';
+}
+
+function saveLeave() {
+  const from = $('#lv-from').value, to = $('#lv-to').value;
+  const days = leaveDays(from, to, $('#lv-skip').checked);
+  if (!days.length) { toast('เลือกช่วงวันที่ให้ถูกต้อง'); return; }
+  const dup = days.filter(d => leaves.some(l => l.days.includes(d)));
+  if (dup.length) { toast(`มีการลาวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
+  leaves.push({ id: uid(), type: leaveType, from, to, days, note: $('#lv-note').value.trim(),
+    createdAt: Date.now(), name: profile.name, empId: profile.empId });
+  persistLeaves();
+  $('#leave-form').hidden = true;
+  leaveMonth = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1);
+  renderLeave(); renderToday();
+  toast(`บันทึก${LEAVE_TYPES[leaveType]} ${days.length} วันแล้ว`);
+  syncAll();
+}
+
+function renderLeave() {
+  const y = leaveMonth.getFullYear(), m = leaveMonth.getMonth() + 1;
+  const inMonth = d => +d.slice(0, 4) === y && +d.slice(5, 7) === m;
+  const inYear = d => +d.slice(0, 4) === y;
+  const count = (type, pred) => leaves.filter(l => l.type === type).reduce((n, l) => n + l.days.filter(pred).length, 0);
+  $('#lv-month').textContent = thMonth.format(leaveMonth);
+  $('#lv-sick').textContent = `${count('sick', inMonth)} วัน`;
+  $('#lv-vac').textContent = `${count('vacation', inMonth)} วัน`;
+  $('#lv-year').textContent = `${count('sick', inYear)} / ${count('vacation', inYear)}`;
+  const list = leaves.filter(l => l.days.some(inMonth)).sort((a, b) => (a.from < b.from ? 1 : -1));
+  $('#leave-list').innerHTML = list.length ? list.map(l => {
+    const n = l.days.filter(inMonth).length;
+    const range = l.from === l.to ? fmtDay(l.from) : `${fmtDay(l.from)} – ${fmtDay(l.to)}`;
+    const pend = settings.scriptUrl && !l.synced ? ' <span class="chip">รอส่ง</span>' : '';
+    return `<div class="row">
+      <div class="row-main">
+        <div class="row-title"><span class="chip ${l.type === 'sick' ? 'sick' : 'vac'}">${LEAVE_TYPES[l.type]}</span> ${range}${pend}</div>
+        <div class="row-sub">${n} วันในเดือนนี้${l.days.length !== n ? ` (ทั้งหมด ${l.days.length} วัน)` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
+      </div>
+      <button class="btn sm danger" data-lv-del="${l.id}">ยกเลิกการลา</button>
+    </div>`;
+  }).join('') : '<div class="empty"><b>ไม่มีการลาในเดือนนี้</b>กดปุ่มลาป่วยหรือลาพักผ่อนด้านบนเพื่อแจ้งลา</div>';
+}
+
+function deleteLeave(id) {
+  const l = leaves.find(x => x.id === id); if (!l) return;
+  leaves = leaves.filter(x => x.id !== id); persistLeaves();
+  if (l.synced) { pendingLeaveDeletes.push(id); store.set('ci.pendingLeaveDeletes', pendingLeaveDeletes); }
+  renderLeave(); renderToday(); toast('ยกเลิกการลาแล้ว'); syncAll();
+}
+
+function leaveRow(l) {
+  const c = new Date(l.createdAt);
+  return { id: l.id, type: LEAVE_TYPES[l.type], days: l.days, note: l.note || '', name: l.name || profile.name || '',
+    empId: l.empId || profile.empId || '', created: `${dayKey(c)} ${hms(c)}` };
+}
+
 /* ---------- sites ---------- */
 let editingId = null;
 function initSiteMap() {
@@ -978,11 +1152,12 @@ function saveSites() { store.set('ci.sites.v2', sites); renderSites(false); if (
 /* ---------- navigation ---------- */
 function show(pg) {
   if (pg === 'sites' && !IS_ADMIN) pg = 'home';
-  ['home', 'history', 'sites', 'settings'].forEach(p => $('#pg-' + p).hidden = p !== pg);
+  ['home', 'history', 'leave', 'sites', 'settings'].forEach(p => $('#pg-' + p).hidden = p !== pg);
   document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.pg === pg));
   if (pg === 'home') setTimeout(() => homeMap.invalidateSize(), 30);
   if (pg === 'sites') { if (!siteMap) initSiteMap(); setTimeout(() => siteMap.invalidateSize(), 30); }
   if (pg === 'history') renderHistory();
+  if (pg === 'leave') renderLeave();
   if (pg === 'settings') renderSettings();
   window.scrollTo(0, 0);
 }
@@ -1002,6 +1177,20 @@ document.querySelectorAll('.nav button').forEach(b => b.onclick = () => show(b.d
 $('#cta').onclick = openCamera;
 $('#cam-close').onclick = closeCamera;
 $('#shutter').onclick = capture;
+$('#pin-toggle').onclick = () => setManualPin(!manualPin);
+document.querySelectorAll('[data-leave]').forEach(b => b.onclick = () => openLeaveForm(b.dataset.leave));
+$('#lv-from').onchange = () => { if ($('#lv-to').value < $('#lv-from').value) $('#lv-to').value = $('#lv-from').value; updateLeaveCount(); };
+$('#lv-to').onchange = updateLeaveCount;
+$('#lv-skip').onchange = updateLeaveCount;
+$('#lv-cancel').onclick = () => $('#leave-form').hidden = true;
+$('#leave-form').onsubmit = e => { e.preventDefault(); saveLeave(); };
+$('#lv-prev').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() - 1, 1); renderLeave(); };
+$('#lv-next').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() + 1, 1); renderLeave(); };
+$('#leave-list').onclick = e => {
+  const b = e.target.closest('[data-lv-del]'); if (!b) return;
+  if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อยืนยัน'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ยกเลิกการลา'; }, 3000); return; }
+  deleteLeave(b.dataset.lvDel);
+};
 $('#retake').onclick = () => { if (stream) liveMode(); else openCamera(); };
 $('#upload-input').onchange = e => { useUploadedPhoto(e.target.files[0]); e.target.value = ''; };
 $('#confirm').onclick = confirmShot;
