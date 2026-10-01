@@ -9,15 +9,33 @@ const FOLDER_NAME = 'รูปเช็คอินเซลฟี่';
 const LOG = 'ลงเวลา', DAILY = 'สรุปรายวัน', MONTHLY = 'สรุปรายเดือน', SITES = 'จุดทำงาน';
 
 const HEADERS = ['ID', 'วันที่', 'เวลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'จุดทำงาน', 'ระยะ (ม.)', 'ในพื้นที่',
-  'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ (ม.)', 'หมายเหตุ', 'รูป', 'ทดสอบ', 'บันทึกเมื่อ', 'แก้ไขเมื่อ', 'เวลาเดิมก่อนแก้'];
-const COL_PHOTO = 14, COL_CREATED = 16;
+  'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ (ม.)', 'หมายเหตุ', 'รูป', 'ทดสอบ', 'บันทึกเมื่อ', 'แก้ไขเมื่อ', 'เวลาเดิมก่อนแก้',
+  'ภาค', 'ลิงก์รูป'];
+const COL_CREATED = 16, COL_REGION = 19, COL_PHOTO_URL = 20;
+
+// แต่ละภาคมีแท็บของตัวเอง ระบบจัดรายการเข้าภาคตามจุดทำงาน (หรือชื่อจังหวัดในชื่อจุด ถ้าเพิ่มจุดใหม่ในแอป)
+const REGIONS = [
+  { name: 'ภาคเหนือ', provinces: ['เชียงใหม่', 'เชียงราย', 'ลำพูน', 'ลำปาง', 'แม่ฮ่องสอน', 'พะเยา', 'แพร่', 'น่าน', 'อุตรดิตถ์', 'พิษณุโลก', 'สุโขทัย', 'ตาก', 'มช'] },
+  { name: 'ภาคตะวันออกเฉียงเหนือ', provinces: ['ขอนแก่น', 'อุดรธานี', 'นครราชสีมา', 'อุบลราชธานี', 'มหาสารคาม', 'ร้อยเอ็ด', 'กาฬสินธุ์', 'สกลนคร', 'นครพนม', 'หนองคาย', 'เลย', 'ชัยภูมิ', 'บุรีรัมย์', 'สุรินทร์', 'ศรีสะเกษ', 'มข'] },
+  { name: 'ภาคใต้', provinces: ['สงขลา', 'หาดใหญ่', 'ปัตตานี', 'ภูเก็ต', 'สุราษฎร์ธานี', 'นครศรีธรรมราช', 'ตรัง', 'พัทลุง', 'สตูล', 'ยะลา', 'นราธิวาส', 'กระบี่', 'ชุมพร', 'ม.อ.'] },
+  { name: 'ภาคตะวันออก', provinces: ['ระยอง', 'ชลบุรี', 'จันทบุรี', 'ตราด', 'ฉะเชิงเทรา', 'ปราจีนบุรี', 'สระแก้ว'] }
+];
+const OTHER_REGION = 'อื่นๆ';
 
 const SITE_LIST = [
-  ['อุทยานวิทยาศาสตร์และเทคโนโลยี ม.เชียงใหม่', 'เชียงใหม่', 18.76467, 98.93700, 300],
-  ['อุทยานวิทยาศาสตร์ ม.ขอนแก่น', 'ขอนแก่น', 16.45588, 102.81942, 300],
-  ['อุทยานวิทยาศาสตร์ ม.สงขลานครินทร์', 'สงขลา', 7.02194, 100.55542, 300],
-  ['ปส. ภาคตะวันออก (ศาลากลาง จ.ระยอง)', 'ระยอง', 12.70726, 101.18380, 300]
+  ['อุทยานวิทยาศาสตร์และเทคโนโลยี ม.เชียงใหม่', 'เชียงใหม่', 'ภาคเหนือ', 18.76467, 98.93700, 300],
+  ['อุทยานวิทยาศาสตร์ ม.ขอนแก่น', 'ขอนแก่น', 'ภาคตะวันออกเฉียงเหนือ', 16.45588, 102.81942, 300],
+  ['อุทยานวิทยาศาสตร์ ม.สงขลานครินทร์', 'สงขลา', 'ภาคใต้', 7.02194, 100.55542, 300],
+  ['ปส. ภาคตะวันออก (ศาลากลาง จ.ระยอง)', 'ระยอง', 'ภาคตะวันออก', 12.70726, 101.18380, 300]
 ];
+
+function regionOf(site) {
+  site = String(site || '');
+  const known = SITE_LIST.find(s => s[0] === site);
+  if (known) return known[2];
+  const hit = REGIONS.find(r => r.provinces.some(p => site.indexOf(p) >= 0));
+  return hit ? hit.name : OTHER_REGION;
+}
 
 const C = { head: '#0e5a52', headFg: '#ffffff', band: '#f3f6f4', warn: '#fbecd3', edit: '#e3edfb', muted: '#8a9a96', title: '#14211e' };
 
@@ -54,7 +72,7 @@ function doPost(e) {
       const r = req.record, row = findRow(sh, r.id);
       if (!row) return out({ ok: false, error: 'ไม่พบรายการใน Sheet' });
       const cur = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
-      sh.getRange(row, 1, 1, HEADERS.length).setValues([toRow(r, cur[COL_PHOTO - 1], cur[COL_CREATED - 1])]);
+      sh.getRange(row, 1, 1, HEADERS.length).setValues([toRow(r, cur[COL_PHOTO_URL - 1], cur[COL_CREATED - 1])]);
       return out({ ok: true });
     }
 
@@ -76,7 +94,8 @@ function doPost(e) {
 function toRow(r, photoUrl, created) {
   const photo = photoUrl ? '=HYPERLINK("' + photoUrl + '","ดูรูป")' : '';
   return [r.id, r.date, r.time, r.type, r.name, r.empId, r.site, r.dist, r.inRange,
-    r.lat, r.lng, r.acc, r.note, photo, r.mock, created, r.editedAt, r.origTime];
+    r.lat, r.lng, r.acc, r.note, photo, r.mock, created, r.editedAt, r.origTime,
+    regionOf(r.site), photoUrl || ''];
 }
 
 function findRow(sh, id) {
@@ -115,13 +134,16 @@ function setup() {
   buildDaily(ss);
   buildMonthly(ss);
   buildSites(ss);
+  const regionNames = REGIONS.map(r => r.name).concat([OTHER_REGION]);
+  regionNames.forEach(name => buildRegion(ss, name));
   getFolder();
 
-  // เรียงแท็บ: สรุปรายเดือน → สรุปรายวัน → ลงเวลา → จุดทำงาน
-  [MONTHLY, DAILY, LOG, SITES].forEach((name, i) => { ss.setActiveSheet(ss.getSheetByName(name)); ss.moveActiveSheet(i + 1); });
+  // เรียงแท็บ: สรุปรายเดือน → สรุปรายวัน → แต่ละภาค → ลงเวลา → จุดทำงาน
+  const order = [MONTHLY, DAILY].concat(regionNames, [LOG, SITES]);
+  order.forEach((name, i) => { ss.setActiveSheet(ss.getSheetByName(name)); ss.moveActiveSheet(i + 1); });
   // ลบชีตว่างเริ่มต้น (Sheet1 / แผ่น1)
   ss.getSheets().forEach(s => {
-    if ([MONTHLY, DAILY, LOG, SITES].indexOf(s.getName()) < 0 && s.getLastRow() === 0 && s.getLastColumn() === 0) ss.deleteSheet(s);
+    if (order.indexOf(s.getName()) < 0 && s.getLastRow() === 0 && s.getLastColumn() === 0) ss.deleteSheet(s);
   });
   ss.setActiveSheet(ss.getSheetByName(MONTHLY));
 }
@@ -140,6 +162,7 @@ function styleHeader(sh, row, n) {
 function trimColumns(sh, n) {
   const extra = sh.getMaxColumns() - n;
   if (extra > 0) sh.deleteColumns(n + 1, extra);
+  if (extra < 0) sh.insertColumnsAfter(sh.getMaxColumns(), -extra);
 }
 
 function band(sh, range) {
@@ -151,14 +174,23 @@ function band(sh, range) {
 /* ---------- ลงเวลา (ข้อมูลดิบจากแอป) ---------- */
 function buildLog(ss) {
   const sh = sheet(ss, LOG), n = HEADERS.length;
+  trimColumns(sh, n);
   sh.getRange(1, 1, 1, n).setValues([HEADERS]);
   styleHeader(sh, 1, n);
-  trimColumns(sh, n);
   sh.setFrozenColumns(3);
 
-  const widths = [70, 95, 75, 75, 140, 95, 260, 70, 70, 90, 90, 90, 220, 70, 60, 140, 140, 140];
+  const widths = [70, 95, 75, 75, 140, 95, 260, 70, 70, 90, 90, 90, 220, 70, 60, 140, 140, 140, 170, 120];
   widths.forEach((w, i) => sh.setColumnWidth(i + 1, w));
-  sh.hideColumns(1);   // ID ใช้อ้างอิงตอนแก้ไขจากแอป ไม่ต้องเห็น
+  sh.hideColumns(1);               // ID ใช้อ้างอิงตอนแก้ไขจากแอป ไม่ต้องเห็น
+  sh.hideColumns(COL_PHOTO_URL);   // URL รูปแบบเต็ม ใช้ทำลิงก์ในแท็บภาค
+
+  // เติมภาคให้แถวเก่าที่ยังไม่มี
+  const last = sh.getLastRow();
+  if (last > 1) {
+    const sitesCol = sh.getRange(2, 7, last - 1, 1).getValues();
+    const regionCol = sh.getRange(2, COL_REGION, last - 1, 1).getValues();
+    sh.getRange(2, COL_REGION, last - 1, 1).setValues(regionCol.map((v, i) => [v[0] || regionOf(sitesCol[i][0])]));
+  }
 
   const rows = sh.getMaxRows() - 1;
   sh.getRange(2, 2, rows, 1).setNumberFormat('ddd d mmm yyyy');
@@ -265,19 +297,86 @@ function buildMonthly(ss) {
   return sh;
 }
 
+/* ---------- แท็บแยกภาค (ดึงจากแท็บลงเวลาอัตโนมัติ) ---------- */
+const REGION_TAB_COLORS = { 'ภาคเหนือ': '#2e7d5b', 'ภาคตะวันออกเฉียงเหนือ': '#b8862b', 'ภาคใต้': '#2a6cb0', 'ภาคตะวันออก': '#8a4fb0' };
+
+function buildRegion(ss, name) {
+  const sh = sheet(ss, name);
+  sh.clear();
+  sh.getBandings().forEach(b => b.remove());
+  const L = "'" + LOG + "'!", R = '$A$1';
+  const real = L + 'S2:S=' + R + ',' + L + 'O2:O<>"ใช่"';   // รายการของภาคนี้ ไม่รวมโหมดทดสอบ
+  const head = ['วันที่', 'เวลา', 'ประเภท', 'จุดทำงาน', 'ระยะ (ม.)', 'ในพื้นที่', 'หมายเหตุ', 'รูป', 'แก้ไข'];
+  trimColumns(sh, head.length);
+  sh.setTabColor(REGION_TAB_COLORS[name] || C.muted);
+
+  // หัวแท็บ: ชื่อภาค (สูตรอ้างอิงเซลล์ A1) + จุดทำงานในภาค
+  sh.getRange('A1').setValue(name).setFontSize(16).setFontWeight('bold').setFontColor(C.title);
+  sh.setRowHeight(1, 34);
+  const siteNames = SITE_LIST.filter(s => s[2] === name).map(s => s[0]);
+  sh.getRange('A2').setValue(siteNames.length ? 'จุดทำงาน: ' + siteNames.join(', ') : 'จุดทำงานที่จัดเข้าภาคใดไม่ได้')
+    .setFontColor(C.muted);
+
+  // ตัวเลขสรุปของภาค
+  const days = 'UNIQUE(FILTER(' + L + 'B2:B,' + real + '))';
+  const minIn = 'MINIFS(' + L + 'C2:C,' + L + 'B2:B,x,' + L + 'S2:S,' + R + ',' + L + 'D2:D,"เข้างาน",' + L + 'O2:O,"<>ใช่")';
+  const maxOut = 'MAXIFS(' + L + 'C2:C,' + L + 'B2:B,x,' + L + 'S2:S,' + R + ',' + L + 'D2:D,"ออกงาน",' + L + 'O2:O,"<>ใช่")';
+  sh.getRange('A3:F3').setValues([['วันที่มาทำงาน', '', 'ชั่วโมงรวม', '', 'มาล่าสุด', '']]);
+  sh.getRange('B3').setFormula('=IFERROR(COUNTA(' + days + '),0)').setNumberFormat('0 "วัน"');
+  sh.getRange('D3').setFormula('=IFERROR(SUM(MAP(' + days + ',LAMBDA(x,LET(i,' + minIn + ',o,' + maxOut + ',IF(AND(i>0,o>i),o-i,0))))),0)')
+    .setNumberFormat('[h]:mm "ชม."');
+  sh.getRange('F3').setFormula('=IFERROR(MAX(FILTER(' + L + 'B2:B,' + real + ')),"–")').setNumberFormat('d mmm yyyy');
+  sh.getRange('A3:F3').setFontColor(C.muted);
+  sh.getRange('B3').setFontWeight('bold').setFontColor(C.title).setHorizontalAlignment('left');
+  sh.getRange('D3').setFontWeight('bold').setFontColor(C.title).setHorizontalAlignment('left');
+  sh.getRange('F3').setFontWeight('bold').setFontColor(C.title).setHorizontalAlignment('left');
+
+  // ตารางรายการ: เรียงใหม่สุดก่อน
+  sh.getRange(5, 1, 1, head.length).setValues([head]);
+  styleHeader(sh, 5, head.length);
+  const cols = ['B', 'C', 'D', 'G', 'H', 'I', 'M', 'T', 'Q'].map(c => L + c + '2:' + c).join(',');
+  sh.getRange('A6').setFormula('=IFERROR(LET(f,FILTER({' + cols + '},' + real + '),s,SORT(f,1,FALSE,2,FALSE),' +
+    'HSTACK(CHOOSECOLS(s,1,2,3,4,5,6,7),' +
+    'MAP(CHOOSECOLS(s,8),LAMBDA(u,IF(u="","",HYPERLINK(u,"ดูรูป")))),' +
+    'MAP(CHOOSECOLS(s,9),LAMBDA(e,IF(e="","","แก้ไข"))))),"ยังไม่มีรายการ")');
+
+  const rows = sh.getMaxRows() - 5;
+  sh.getRange(6, 1, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
+  sh.getRange(6, 2, rows, 1).setNumberFormat('HH:mm');
+  sh.getRange(6, 2, rows, 2).setHorizontalAlignment('center');
+  sh.getRange(6, 5, rows, 2).setHorizontalAlignment('center');
+  sh.getRange(6, 8, rows, 2).setHorizontalAlignment('center');
+  sh.getRange(6, 7, rows, 1).setWrap(true);
+  [130, 70, 80, 270, 80, 80, 240, 70, 70].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  band(sh, sh.getRange(6, 1, rows, head.length));
+
+  const all = sh.getRange(6, 1, rows, head.length);
+  sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F6="ไม่"')
+      .setBackground(C.warn).setRanges([all]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('เข้างาน')
+      .setFontColor('#1d7a46').setBold(true).setRanges([sh.getRange(6, 3, rows, 1)]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ออกงาน')
+      .setFontColor('#a15c00').setBold(true).setRanges([sh.getRange(6, 3, rows, 1)]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('แก้ไข')
+      .setBackground(C.edit).setFontColor('#2a5db0').setRanges([sh.getRange(6, 9, rows, 1)]).build()
+  ]);
+  return sh;
+}
+
 /* ---------- จุดทำงาน (อ้างอิง) ---------- */
 function buildSites(ss) {
   const sh = sheet(ss, SITES);
   sh.clear();
-  const head = ['จุดทำงาน', 'จังหวัด', 'ละติจูด', 'ลองจิจูด', 'รัศมี (ม.)', 'แผนที่'];
+  const head = ['จุดทำงาน', 'จังหวัด', 'ภาค', 'ละติจูด', 'ลองจิจูด', 'รัศมี (ม.)', 'แผนที่'];
+  trimColumns(sh, head.length);
   sh.getRange(1, 1, 1, head.length).setValues([head]);
   styleHeader(sh, 1, head.length);
-  trimColumns(sh, head.length);
-  const rows = SITE_LIST.map(s => s.concat(['=HYPERLINK("https://www.google.com/maps?q=' + s[2] + ',' + s[3] + '","เปิดแผนที่")']));
+  const rows = SITE_LIST.map(s => s.concat(['=HYPERLINK("https://www.google.com/maps?q=' + s[3] + ',' + s[4] + '","เปิดแผนที่")']));
   sh.getRange(2, 1, rows.length, head.length).setValues(rows);
-  sh.getRange(2, 3, rows.length, 2).setNumberFormat('0.00000');
-  sh.getRange(2, 2, rows.length, 5).setHorizontalAlignment('center');
-  [300, 100, 100, 100, 90, 100].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  sh.getRange(2, 4, rows.length, 2).setNumberFormat('0.00000');
+  sh.getRange(2, 2, rows.length, 6).setHorizontalAlignment('center');
+  [300, 100, 170, 100, 100, 90, 100].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.getRange(rows.length + 3, 1).setValue('รายการนี้ใช้อ้างอิงเท่านั้น การเพิ่มหรือแก้จุดทำงานให้ทำในแท็บ "จุดทำงาน" ของแอป')
     .setFontColor(C.muted).setFontStyle('italic');
   band(sh, sh.getRange(2, 1, rows.length, head.length));
