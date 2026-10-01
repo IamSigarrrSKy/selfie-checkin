@@ -94,7 +94,7 @@ function doPost(e) {
 function toRow(r, photoUrl, created) {
   const photo = photoUrl ? '=HYPERLINK("' + photoUrl + '","ดูรูป")' : '';
   return [r.id, r.date, r.time, r.type, r.name, r.empId, r.site, r.dist, r.inRange,
-    r.lat, r.lng, r.acc, r.note, photo, r.mock, created, r.editedAt, r.origTime,
+    r.lat, r.lng, r.acc, r.note, photo, r.mock, created, "", "",   // ไม่บันทึกประวัติการแก้ไขลง Sheet
     regionOf(r.site), photoUrl || ''];
 }
 
@@ -183,6 +183,8 @@ function buildLog(ss) {
   widths.forEach((w, i) => sh.setColumnWidth(i + 1, w));
   sh.hideColumns(1);               // ID ใช้อ้างอิงตอนแก้ไขจากแอป ไม่ต้องเห็น
   sh.hideColumns(COL_PHOTO_URL);   // URL รูปแบบเต็ม ใช้ทำลิงก์ในแท็บภาค
+  sh.hideColumns(17, 2);           // คอลัมน์ประวัติการแก้ไข (ไม่ใช้แล้ว)
+  if (sh.getLastRow() > 1) sh.getRange(2, 17, sh.getLastRow() - 1, 2).clearContent();
 
   // เติมภาคให้แถวเก่าที่ยังไม่มี
   const last = sh.getLastRow();
@@ -216,8 +218,6 @@ function buildLog(ss) {
       .setFontColor(C.muted).setItalic(true).setRanges([all]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$I2="ไม่"')
       .setBackground(C.warn).setRanges([all]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$Q2<>""')
-      .setBackground(C.edit).setRanges([sh.getRange(2, 2, rows, 3), sh.getRange(2, 17, rows, 2)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('เข้างาน')
       .setFontColor('#1d7a46').setBold(true).setRanges([sh.getRange(2, 4, rows, 1)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ออกงาน')
@@ -231,7 +231,7 @@ function buildDaily(ss) {
   const sh = sheet(ss, DAILY);
   sh.clear();
   const L = "'" + LOG + "'!";
-  const head = ['วันที่', 'จุดทำงาน', 'เข้างาน', 'ออกงาน', 'ชั่วโมงทำงาน', 'นอกพื้นที่', 'แก้ไข', 'หมายเหตุ'];
+  const head = ['วันที่', 'จุดทำงาน', 'เข้างาน', 'ออกงาน', 'ชั่วโมงทำงาน', 'นอกพื้นที่', 'หมายเหตุ'];
   sh.getRange(1, 1, 1, head.length).setValues([head]);
   styleHeader(sh, 1, head.length);
   trimColumns(sh, head.length);
@@ -243,24 +243,21 @@ function buildDaily(ss) {
   sh.getRange('D2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,LET(v,MAXIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + L + 'D2:D,"ออกงาน",' + real + '),IF(v=0,,v)))))');
   sh.getRange('E2').setFormula('=MAP(C2:C,D2:D,LAMBDA(i,o,IF(OR(i="",o=""),,IF(o>i,o-i,))))');
   sh.getRange('F2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,IF(COUNTIFS(' + L + 'B2:B,d,' + L + 'I2:I,"ไม่",' + real + ')>0,"นอกพื้นที่",))))');
-  sh.getRange('G2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,IF(COUNTIFS(' + L + 'B2:B,d,' + L + 'Q2:Q,"<>",' + real + ')>0,"แก้ไข",))))');
-  sh.getRange('H2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,IFERROR(TEXTJOIN(" / ",TRUE,FILTER(' + L + 'M2:M,' + L + 'B2:B=d,' + L + 'M2:M<>"",' + L + 'O2:O<>"ใช่")),))))');
+  sh.getRange('G2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,IFERROR(TEXTJOIN(" / ",TRUE,FILTER(' + L + 'M2:M,' + L + 'B2:B=d,' + L + 'M2:M<>"",' + L + 'O2:O<>"ใช่")),))))');
 
   const rows = sh.getMaxRows() - 1;
   sh.getRange(2, 1, rows, 1).setNumberFormat('ddd d mmm yyyy');
   sh.getRange(2, 3, rows, 2).setNumberFormat('HH:mm');
   sh.getRange(2, 5, rows, 1).setNumberFormat('[h]:mm');
   sh.getRange(2, 1, rows, 1).setHorizontalAlignment('left');
-  sh.getRange(2, 3, rows, 5).setHorizontalAlignment('center');
-  sh.getRange(2, 8, rows, 1).setWrap(true);
-  [130, 260, 80, 80, 100, 90, 70, 280].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  sh.getRange(2, 3, rows, 4).setHorizontalAlignment('center');
+  sh.getRange(2, 7, rows, 1).setWrap(true);
+  [130, 260, 80, 80, 100, 90, 300].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(2, 1, rows, head.length));
 
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('นอกพื้นที่')
       .setBackground(C.warn).setFontColor('#a15c00').setRanges([sh.getRange(2, 6, rows, 1)]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('แก้ไข')
-      .setBackground(C.edit).setFontColor('#2a5db0').setRanges([sh.getRange(2, 7, rows, 1)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($A2<>"",OR($C2="",$D2=""))')
       .setFontColor(C.muted).setRanges([sh.getRange(2, 5, rows, 1)]).build()
   ]);
@@ -313,7 +310,7 @@ function buildRegion(ss, name) {
   sh.getBandings().forEach(b => b.remove());
   const L = "'" + LOG + "'!", R = '$A$1';
   const real = L + 'S2:S=' + R + ',' + L + 'O2:O<>"ใช่"';   // รายการของภาคนี้ ไม่รวมโหมดทดสอบ
-  const head = ['วันที่', 'เวลา', 'ประเภท', 'จุดทำงาน', 'ระยะ (ม.)', 'ในพื้นที่', 'หมายเหตุ', 'รูป', 'แก้ไข'];
+  const head = ['วันที่', 'เวลา', 'ประเภท', 'จุดทำงาน', 'ระยะ (ม.)', 'ในพื้นที่', 'หมายเหตุ', 'รูป'];
   trimColumns(sh, head.length);
   sh.setTabColor(REGION_TAB_COLORS[name] || C.muted);
 
@@ -341,20 +338,19 @@ function buildRegion(ss, name) {
   // ตารางรายการ: เรียงใหม่สุดก่อน
   sh.getRange(5, 1, 1, head.length).setValues([head]);
   styleHeader(sh, 5, head.length);
-  const cols = ['B', 'C', 'D', 'G', 'H', 'I', 'M', 'T', 'Q'].map(c => L + c + '2:' + c).join(',');
+  const cols = ['B', 'C', 'D', 'G', 'H', 'I', 'M', 'T'].map(c => L + c + '2:' + c).join(',');
   sh.getRange('A6').setFormula('=IFERROR(LET(f,FILTER({' + cols + '},' + real + '),s,SORT(f,1,FALSE,2,FALSE),' +
     'HSTACK(CHOOSECOLS(s,1,2,3,4,5,6,7),' +
-    'MAP(CHOOSECOLS(s,8),LAMBDA(u,IF(u="","",HYPERLINK(u,"ดูรูป")))),' +
-    'MAP(CHOOSECOLS(s,9),LAMBDA(e,IF(e="","","แก้ไข"))))),"ยังไม่มีรายการ")');
+    'MAP(CHOOSECOLS(s,8),LAMBDA(u,IF(u="","",HYPERLINK(u,"ดูรูป"))))),"ยังไม่มีรายการ")');
 
   const rows = sh.getMaxRows() - 5;
   sh.getRange(6, 1, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
   sh.getRange(6, 2, rows, 1).setNumberFormat('HH:mm');
   sh.getRange(6, 2, rows, 2).setHorizontalAlignment('center');
   sh.getRange(6, 5, rows, 2).setHorizontalAlignment('center');
-  sh.getRange(6, 8, rows, 2).setHorizontalAlignment('center');
+  sh.getRange(6, 8, rows, 1).setHorizontalAlignment('center');
   sh.getRange(6, 7, rows, 1).setWrap(true);
-  [130, 70, 80, 270, 80, 80, 240, 70, 70].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  [130, 70, 80, 270, 80, 80, 260, 70].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(6, 1, rows, head.length));
 
   const all = sh.getRange(6, 1, rows, head.length);
@@ -364,9 +360,7 @@ function buildRegion(ss, name) {
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('เข้างาน')
       .setFontColor('#1d7a46').setBold(true).setRanges([sh.getRange(6, 3, rows, 1)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ออกงาน')
-      .setFontColor('#a15c00').setBold(true).setRanges([sh.getRange(6, 3, rows, 1)]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('แก้ไข')
-      .setBackground(C.edit).setFontColor('#2a5db0').setRanges([sh.getRange(6, 9, rows, 1)]).build()
+      .setFontColor('#a15c00').setBold(true).setRanges([sh.getRange(6, 3, rows, 1)]).build()
   ]);
   return sh;
 }
