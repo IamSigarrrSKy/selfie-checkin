@@ -843,15 +843,25 @@ function confirmShot() {
 let syncing = false, syncAgain = false;
 const persistRecords = () => store.set('ci.records', records);
 
-async function postSheet(payload) {
-  const res = await fetch(settings.scriptUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // simple request: ไม่มี CORS preflight
-    body: JSON.stringify({ ...payload, token: settings.token || '' })
-  });
-  const j = parseReply(await res.text());
-  if (!j.ok) throw new Error(j.error || 'ส่งข้อมูลไม่สำเร็จ');
-  return j;
+// ทุกคำสั่งส่งซ้ำได้ปลอดภัย (Sheet กันรายการซ้ำด้วย ID) จึงลองใหม่เมื่อคำตอบหายระหว่างทาง
+async function postSheet(payload, tries = 3) {
+  for (let i = 1; ; i++) {
+    try {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 60000);
+      const res = await fetch(settings.scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // simple request: ไม่มี CORS preflight
+        body: JSON.stringify({ ...payload, token: settings.token || '' }),
+        signal: ctl.signal
+      }).finally(() => clearTimeout(timer));
+      const j = parseReply(await res.text());
+      if (!j.ok) throw Object.assign(new Error(j.error || 'ส่งข้อมูลไม่สำเร็จ'), { final: true });
+      return j;
+    } catch (e) {
+      if (e.final || i >= tries) throw e;
+      await new Promise(r => setTimeout(r, 2000 * i));
+    }
+  }
 }
 
 // บางครั้ง Google ห่อคำตอบ JSON ไว้ในหน้า HTML: ดึง JSON ออกจากข้อความในหน้า
