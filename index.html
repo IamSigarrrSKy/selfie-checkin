@@ -840,7 +840,7 @@ function confirmShot() {
 }
 
 /* ---------- Google Sheet sync (ผ่าน Apps Script) ---------- */
-let syncing = false;
+let syncing = false, syncAgain = false;
 const persistRecords = () => store.set('ci.records', records);
 
 async function postSheet(payload) {
@@ -879,7 +879,8 @@ const pendingCount = () => records.filter(r => !r.synced || r.dirty).length + pe
   + leaves.filter(l => !l.synced).length + pendingLeaveDeletes.length;
 
 async function syncAll() {
-  if (!settings.scriptUrl || syncing) { renderSyncNote(); return; }
+  if (syncing) { syncAgain = true; return; }   // มีรายการใหม่ระหว่างกำลังส่ง: ส่งต่อทันทีเมื่อรอบนี้จบ
+  if (!settings.scriptUrl) { renderSyncNote(); return; }
   syncing = true; renderSyncNote();
   let err = null;
   try {
@@ -909,6 +910,8 @@ async function syncAll() {
   syncing = false;
   settings.lastSyncErr = err ? String(err.message || err) : '';
   renderSyncNote(); renderToday(); if (!$('#pg-history').hidden) renderHistory(); if (!$('#pg-leave').hidden) renderLeave();
+  if (syncAgain && !err) { syncAgain = false; return syncAll(); }
+  syncAgain = false;
   return !err;
 }
 
