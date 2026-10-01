@@ -701,6 +701,7 @@ function capture() {
 }
 
 function showPreview() {
+  $('#cam-msg').hidden = true;
   $('#shot').src = shotData; $('#shot').hidden = false; $('#video').hidden = true; $('#guide').style.display = 'none';
   $('#live-ctl').hidden = true; $('#confirm-ctl').hidden = false;
   $('#out-warn').hidden = shotMeta.inRange;
