@@ -415,7 +415,7 @@ function buildRegion(ss, name) {
 
   // ตัวเลขสรุปของภาค
   sh.getRange('A3:F3').setValues([['วันที่เช็คอิน', '', 'จำนวนครั้ง', '', 'ล่าสุด', '']]);
-  sh.getRange('B3').setFormula('=IFERROR(COUNTA(UNIQUE(FILTER(' + L + 'B2:B,' + real + '))),0)').setNumberFormat('0 "วัน"');
+  sh.getRange('B3').setFormula('=IFERROR(ROWS(UNIQUE(FILTER(' + L + 'B2:B,' + real + '))),0)').setNumberFormat('0 "วัน"');
   sh.getRange('D3').setFormula('=COUNTIFS(' + L + 'S2:S,' + R + ',' + L + 'O2:O,"<>ใช่",' + L + 'B2:B,"<>")').setNumberFormat('0 "ครั้ง"');
   sh.getRange('F3').setFormula('=IFERROR(MAX(FILTER(' + L + 'B2:B,' + real + ')),"–")').setNumberFormat('d mmm yyyy');
   sh.getRange('A3:F3').setFontColor(C.muted);
