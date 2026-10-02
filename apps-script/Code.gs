@@ -73,7 +73,7 @@ function doPost(e) {
 
     if (req.action === 'update') {
       const r = req.record, row = findRow(sh, r.id);
-      if (!row) return out({ ok: false, error: 'ไม่พบรายการใน Sheet' });
+      if (!row) return out({ ok: true, missing: true });   // ถูกลบออกจาก Sheet ไปแล้ว: ไม่ต้องทำอะไร
       const cur = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
       sh.getRange(row, 1, 1, HEADERS.length).setValues([toRow(r, cur[COL_PHOTO_URL - 1], cur[COL_CREATED - 1])]);
       return out({ ok: true });
@@ -135,11 +135,87 @@ function getFolder() {
   return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER_NAME);
 }
 
+/* ===================== เมนูลบข้อมูลใน Sheet ===================== */
+
+/** เมนู "ระบบเช็คอิน" ขึ้นเองทุกครั้งที่เปิด Sheet */
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('ระบบเช็คอิน')
+    .addItem('ลบแถวที่เลือก (แท็บเช็คอิน / การลา)', 'deleteSelectedRows')
+    .addItem('ลบข้อมูลทั้งเดือน…', 'deleteMonth')
+    .addSeparator()
+    .addItem('เก็บกวาดแถวที่ลบไม่หมด', 'cleanupBlankRows')
+    .addToUi();
+}
+
+// ลบทั้งแถว (รวมคอลัมน์ที่ซ่อนอยู่) ของแถวที่เลือกในแท็บเช็คอินหรือการลา
+function deleteSelectedRows() {
+  const ui = SpreadsheetApp.getUi(), sh = SpreadsheetApp.getActiveSheet();
+  if ([LOG, LEAVE].indexOf(sh.getName()) < 0) {
+    ui.alert('เปิดแท็บ "' + LOG + '" หรือ "' + LEAVE + '" แล้วเลือกแถวที่ต้องการลบก่อน');
+    return;
+  }
+  const rows = {};
+  sh.getActiveRangeList().getRanges().forEach(r => {
+    for (let i = r.getRow(); i < r.getRow() + r.getNumRows(); i++) if (i > 1 && i <= sh.getLastRow()) rows[i] = true;
+  });
+  const list = Object.keys(rows).map(Number).sort((a, b) => b - a);
+  if (!list.length) { ui.alert('ยังไม่ได้เลือกแถวข้อมูล'); return; }
+  if (ui.alert('ลบ ' + list.length + ' แถวจากแท็บ "' + sh.getName() + '"?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  list.forEach(i => sh.deleteRow(i));
+  ui.alert('ลบแล้ว ' + list.length + ' แถว');
+}
+
+// ลบเช็คอินและการลาทั้งเดือน รูปของเดือนนั้นย้ายไปถังขยะใน Drive (กู้คืนได้ 30 วัน)
+function deleteMonth() {
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt('ลบข้อมูลทั้งเดือน', 'พิมพ์เดือน/ปี เช่น 10/2569 หรือ 10/2026', ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  const m = res.getResponseText().trim().match(/^(\d{1,2})\s*\/\s*(\d{4})$/);
+  if (!m || +m[1] < 1 || +m[1] > 12) { ui.alert('รูปแบบไม่ถูกต้อง พิมพ์เป็น เดือน/ปี เช่น 10/2569'); return; }
+  const month = +m[1], year = +m[2] > 2400 ? +m[2] - 543 : +m[2];
+  const inMonth = v => v instanceof Date && v.getFullYear() === year && v.getMonth() + 1 === month;
+
+  const ss = book(), log = ss.getSheetByName(LOG), lv = ss.getSheetByName(LEAVE);
+  const pick = (sh) => {
+    if (!sh || sh.getLastRow() < 2) return [];
+    const vals = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+    return vals.map((v, i) => ({ row: i + 2, v })).filter(x => inMonth(x.v[1]));
+  };
+  const a = pick(log), b = pick(lv);
+  if (!a.length && !b.length) { ui.alert('ไม่มีข้อมูลของเดือน ' + month + '/' + (year + 543)); return; }
+  const msg = 'เดือน ' + month + '/' + (year + 543) + ': เช็คอิน ' + a.length + ' รายการ, วันลา ' + b.length + ' วัน\n' +
+    'รูปของเดือนนี้จะถูกย้ายไปถังขยะใน Google Drive (กู้คืนได้ภายใน 30 วัน)\nลบเลยไหม?';
+  if (ui.alert('ยืนยันการลบ', msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  a.forEach(x => {   // ย้ายรูปไปถังขยะ
+    const url = String(x.v[COL_PHOTO_URL - 1] || ''), id = (url.match(/\/d\/([^/]+)/) || [])[1];
+    if (id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) { /* ไฟล์ถูกลบไปแล้ว */ } }
+  });
+  a.map(x => x.row).sort((p, q) => q - p).forEach(r => log.deleteRow(r));
+  b.map(x => x.row).sort((p, q) => q - p).forEach(r => lv.deleteRow(r));
+  ui.alert('ลบข้อมูลเดือน ' + month + '/' + (year + 543) + ' แล้ว');
+}
+
+// แถวที่ถูกลบด้วยปุ่ม Delete (ช่องวันที่ว่าง แต่คอลัมน์ที่ซ่อนยังมีค่า) ลบทั้งแถวทิ้ง
+function cleanupBlankRows(silent) {
+  const ss = book();
+  let n = 0;
+  [LOG, LEAVE].forEach(name => {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    const dates = sh.getRange(2, 2, sh.getLastRow() - 1, 1).getValues();
+    for (let i = dates.length - 1; i >= 0; i--) if (dates[i][0] === '' || dates[i][0] === null) { sh.deleteRow(i + 2); n++; }
+  });
+  if (silent !== true) SpreadsheetApp.getUi().alert(n ? 'ลบแถวที่ค้างอยู่ ' + n + ' แถว' : 'ไม่มีแถวค้าง');
+  return n;
+}
+
 /* ===================== ออกแบบชีต ===================== */
 
 /** กด Run ฟังก์ชันนี้หนึ่งครั้ง: สร้าง/จัดรูปแบบทุกชีต (รันซ้ำได้ ข้อมูลเดิมไม่หาย) */
 function setup() {
   const ss = book();
+  cleanupBlankRows(true);
   ss.setSpreadsheetLocale('th_TH');
   ss.setSpreadsheetTimeZone('Asia/Bangkok');
   buildLog(ss);
@@ -317,7 +393,7 @@ function buildRegion(ss, name) {
   sh.clear();
   sh.getBandings().forEach(b => b.remove());
   const L = "'" + LOG + "'!", R = '$A$1';
-  const real = L + 'S2:S=' + R + ',' + L + 'O2:O<>"ใช่"';   // รายการของภาคนี้ ไม่รวมโหมดทดสอบ
+  const real = L + 'S2:S=' + R + ',' + L + 'O2:O<>"ใช่",' + L + 'B2:B<>""';   // รายการของภาคนี้ ไม่รวมโหมดทดสอบ
   const head = ['วันที่', 'เวลา', 'สถานที่', 'หมายเหตุ', 'รูป'];
   trimColumns(sh, Math.max(head.length, 6));
   sh.setTabColor(REGION_TAB_COLORS[name] || C.muted);
@@ -332,7 +408,7 @@ function buildRegion(ss, name) {
   // ตัวเลขสรุปของภาค
   sh.getRange('A3:F3').setValues([['วันที่เช็คอิน', '', 'จำนวนครั้ง', '', 'ล่าสุด', '']]);
   sh.getRange('B3').setFormula('=IFERROR(COUNTA(UNIQUE(FILTER(' + L + 'B2:B,' + real + '))),0)').setNumberFormat('0 "วัน"');
-  sh.getRange('D3').setFormula('=COUNTIFS(' + L + 'S2:S,' + R + ',' + L + 'O2:O,"<>ใช่")').setNumberFormat('0 "ครั้ง"');
+  sh.getRange('D3').setFormula('=COUNTIFS(' + L + 'S2:S,' + R + ',' + L + 'O2:O,"<>ใช่",' + L + 'B2:B,"<>")').setNumberFormat('0 "ครั้ง"');
   sh.getRange('F3').setFormula('=IFERROR(MAX(FILTER(' + L + 'B2:B,' + real + ')),"–")').setNumberFormat('d mmm yyyy');
   sh.getRange('A3:F3').setFontColor(C.muted);
   ['B3', 'D3', 'F3'].forEach(a => sh.getRange(a).setFontWeight('bold').setFontColor(C.title).setHorizontalAlignment('left'));
