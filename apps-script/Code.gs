@@ -105,7 +105,7 @@ function timeSerial(s) {
 
 function toRow(r, photoUrl, created) {
   const photo = photoUrl ? '=HYPERLINK("' + photoUrl + '","ดูรูป")' : '';
-  return [r.id, dateSerial(r.date), timeSerial(r.time), r.type, r.name, r.empId, r.site, r.dist, r.inRange,
+  return [r.id, dateSerial(r.date), timeSerial(r.time), r.type, r.name, '', r.site, r.dist, r.inRange,
     r.lat, r.lng, r.acc, r.note, photo, r.mock, created, "", "",   // ไม่บันทึกประวัติการแก้ไขลง Sheet
     regionOf(r.site), photoUrl || '', r.link || 'A'];
 }
@@ -200,6 +200,8 @@ function buildLog(ss) {
   sh.hideColumns(1);               // ID ใช้อ้างอิงตอนแก้ไขจากแอป ไม่ต้องเห็น
   sh.hideColumns(COL_PHOTO_URL);   // URL รูปแบบเต็ม ใช้ทำลิงก์ในแท็บภาค
   sh.hideColumns(17, 2);           // คอลัมน์ประวัติการแก้ไข (ไม่ใช้แล้ว)
+  sh.hideColumns(6);               // รหัสพนักงาน (ไม่ใช้)
+  if (sh.getLastRow() > 1) sh.getRange(2, 6, sh.getLastRow() - 1, 1).clearContent();
   if (sh.getLastRow() > 1) sh.getRange(2, 17, sh.getLastRow() - 1, 2).clearContent();
 
   // เติมภาคให้แถวเก่าที่ยังไม่มี
@@ -365,7 +367,7 @@ function addLeave(l) {
   const sh = leaveSheet();
   if (findRow(sh, l.id)) return { ok: true, duplicate: true };
   const name = String(l.name || '').trim() || 'ไม่ระบุชื่อ';
-  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, l.empId, l.note, l.created]);
+  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, '', l.note, l.created]);
   if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
   return { ok: true };
 }
@@ -384,6 +386,8 @@ function buildLeave(ss) {
   sh.getRange(1, 1, 1, n).setValues([LEAVE_HEADERS]);
   styleHeader(sh, 1, n);
   sh.hideColumns(1);
+  sh.hideColumns(5);   // รหัสพนักงาน (ไม่ใช้)
+  if (sh.getLastRow() > 1) sh.getRange(2, 5, sh.getLastRow() - 1, 1).clearContent();
   const rows = sh.getMaxRows() - 1;
   sh.getRange(2, 2, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
   sh.getRange(2, 3, rows, 1).setHorizontalAlignment('center');

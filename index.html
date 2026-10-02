@@ -345,10 +345,7 @@ button{cursor:pointer}
     <div class="sec-title">ข้อมูลผู้เช็คอิน</div>
     <form class="card form" id="profile-form" autocomplete="off">
       <div class="field"><label for="pf-name">ชื่อ–นามสกุล</label><input class="input" id="pf-name" placeholder="ชื่อที่จะพิมพ์ลงบนรูป"></div>
-      <div class="grid2">
-        <div class="field"><label for="pf-id">รหัสพนักงาน</label><input class="input num" id="pf-id" placeholder="EMP-0001"></div>
-        <div class="field"><label for="pf-dept">หน่วยงาน</label><input class="input" id="pf-dept" placeholder="ส่วนกลาง"></div>
-      </div>
+      <div class="field"><label for="pf-dept">หน่วยงาน</label><input class="input" id="pf-dept" placeholder="ส่วนกลาง"></div>
       <div class="btns"><span style="flex:1"></span><button class="btn primary" type="submit">บันทึก</button></div>
     </form>
 
@@ -463,7 +460,7 @@ const SHEET_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyBZqSHeAKm1S
 const canStore = (() => { try { localStorage.setItem('ci._t', '1'); localStorage.removeItem('ci._t'); return true; } catch { return false; } })();
 let sites    = store.get('ci.sites.v2', DEFAULT_SITES);
 let records  = store.get('ci.records', []);
-let profile  = store.get('ci.profile', { name: '', empId: '', dept: '' });
+let profile  = store.get('ci.profile', { name: '', dept: '' });
 let settings = Object.assign({ demo: false, allowOut: true, scriptUrl: SHEET_URL_DEFAULT, token: '' }, store.get('ci.settings', {}));
 if (!settings.scriptUrl) settings.scriptUrl = SHEET_URL_DEFAULT;   // ค่าว่างที่เคยบันทึกไว้ ให้ใช้ URL ที่ฝังไว้แทน
 let pendingDeletes = store.get('ci.pendingDeletes', []);
@@ -789,7 +786,7 @@ function capture() {
   x.font = `500 21px ${M}`; x.fillStyle = '#b9cdc8';
   x.fillText(`${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}  ±${pos.acc}m${pos.mock ? '  [TEST]' : ''}`, 28, y0 + 168);
   x.font = `500 22px ${F}`; x.fillStyle = '#ffffff';
-  const who = [profile.name || 'ไม่ระบุชื่อ', profile.empId, profile.dept].filter(Boolean).join(' · ');
+  const who = [profile.name || 'ไม่ระบุชื่อ', profile.dept].filter(Boolean).join(' · ');
   x.fillText(fit(x, who, W - 56), 28, y0 + 204);
 
   shotData = c.toDataURL('image/jpeg', 0.72);
@@ -837,7 +834,7 @@ function confirmShot() {
     lat: shotMeta.pos.lat, lng: shotMeta.pos.lng, acc: shotMeta.pos.acc, mock: !!shotMeta.pos.mock,
     siteId: shotMeta.site ? shotMeta.site.id : '', siteName: shotMeta.site ? shotMeta.site.name : '',
     dist: shotMeta.dist == null ? null : Math.round(shotMeta.dist), inRange: shotMeta.inRange,
-    note, photo: shotData, source: shotMeta.source, link: LINK, name: profile.name, empId: profile.empId, ua: navigator.userAgent
+    note, photo: shotData, source: shotMeta.source, link: LINK, name: profile.name, ua: navigator.userAgent
   };
   records.push(r);
   const saved = store.set('ci.records', records);
@@ -888,7 +885,7 @@ function sheetRow(r) {
   const d = new Date(r.ts);
   return {
     id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : r.type === 'out' ? 'ออกงาน' : 'เช็คอิน',
-    name: r.name || '', empId: r.empId || '', site: placeOf(r), dist: r.dist ?? '', inRange: r.inRange ? 'ใช่' : 'ไม่',
+    name: r.name || '', empId: '', site: placeOf(r), dist: r.dist ?? '', inRange: r.inRange ? 'ใช่' : 'ไม่',
     lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '', link: r.link || 'A',
     editedAt: r.editedAt ? `${dayKey(new Date(r.editedAt))} ${hms(new Date(r.editedAt))}` : '',
     origTime: r.origTs ? `${dayKey(new Date(r.origTs))} ${hms(new Date(r.origTs))}` : ''
@@ -977,7 +974,7 @@ function openDetail(id) {
       ${r.siteName ? `<dt>${r.inRange ? 'จุดที่บันทึกไว้' : 'จุดใกล้สุด'}</dt><dd>${esc(r.siteName)} · <span class="num">${fmtDist(r.dist)}</span></dd>` : ''}
       <dt>พิกัด</dt><dd class="num">${r.lat.toFixed(6)}, ${r.lng.toFixed(6)} (±${r.acc} ม.)</dd>
       ${r.note ? `<dt>หมายเหตุ</dt><dd>${esc(r.note)}</dd>` : ''}
-      <dt>ผู้เช็คอิน</dt><dd>${esc([r.name, r.empId].filter(Boolean).join(' · ') || '–')}</dd>
+      <dt>ผู้เช็คอิน</dt><dd>${esc(r.name || '–')}</dd>
     </dl>
     ${r.origTs ? `<div class="note">แก้ไขเวลาจากเดิม ${thShort.format(new Date(r.origTs))} ${hms(new Date(r.origTs))} · รูปยังแสดงเวลาที่ถ่ายจริง</div>` : ''}
     <div class="btns">
@@ -1030,11 +1027,11 @@ function openEdit(id) {
 
 function exportCSV() {
   if (!records.length) { toast('ยังไม่มีรายการให้ส่งออก'); return; }
-  const head = ['วันที่', 'เวลา', 'ชื่อ', 'รหัสพนักงาน', 'สถานที่', 'จุดใกล้สุด', 'ระยะ(ม.)', 'อยู่ในจุดที่บันทึก', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ(ม.)', 'หมายเหตุ', 'ทดสอบ'];
+  const head = ['วันที่', 'เวลา', 'ชื่อ', 'สถานที่', 'จุดใกล้สุด', 'ระยะ(ม.)', 'อยู่ในจุดที่บันทึก', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ(ม.)', 'หมายเหตุ', 'ทดสอบ'];
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = [...records].sort((a, b) => a.ts - b.ts).map(r => {
     const d = new Date(r.ts);
-    return [dayKey(d), hms(d), r.name, r.empId, placeOf(r), r.siteName, r.dist, r.inRange ? 'ใช่' : 'ไม่', r.lat, r.lng, r.acc, r.note, r.mock ? 'ใช่' : ''].map(q).join(',');
+    return [dayKey(d), hms(d), r.name, placeOf(r), r.siteName, r.dist, r.inRange ? 'ใช่' : 'ไม่', r.lat, r.lng, r.acc, r.note, r.mock ? 'ใช่' : ''].map(q).join(',');
   });
   const blob = new Blob(['﻿' + [head.map(q).join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -1087,7 +1084,7 @@ function saveLeave() {
   const dup = days.filter(d => leaves.some(l => (l.name || '') === name && l.days.includes(d)));
   if (dup.length) { toast(`มีการลาวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
   leaves.push({ id: uid(), type: leaveType, from, to, days, note: $('#lv-note').value.trim(),
-    createdAt: Date.now(), name, empId: profile.empId });
+    createdAt: Date.now(), name });
   persistLeaves();
   $('#leave-form').hidden = true;
   leaveMonth = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1);
@@ -1130,7 +1127,7 @@ function deleteLeave(id) {
 function leaveRow(l) {
   const c = new Date(l.createdAt);
   return { id: l.id, type: LEAVE_TYPES[l.type], days: l.days, note: l.note || '', name: l.name || profile.name || '',
-    empId: l.empId || profile.empId || '', created: `${dayKey(c)} ${hms(c)}` };
+    empId: '', created: `${dayKey(c)} ${hms(c)}` };
 }
 
 /* ---------- sites ---------- */
@@ -1190,7 +1187,7 @@ function show(pg) {
 }
 
 function renderSettings() {
-  $('#pf-name').value = profile.name; $('#pf-id').value = profile.empId; $('#pf-dept').value = profile.dept;
+  $('#pf-name').value = profile.name; $('#pf-dept').value = profile.dept;
   $('#set-demo').checked = settings.demo;
   $('#gs-url').value = settings.scriptUrl || ''; $('#gs-token').value = settings.token || ''; renderSyncNote();
   let kb = 0; try { kb = Math.round((localStorage.getItem('ci.records') || '').length / 1024); } catch {}
@@ -1263,7 +1260,7 @@ $('#site-list').onclick = e => {
 
 $('#profile-form').onsubmit = e => {
   e.preventDefault();
-  profile = { name: $('#pf-name').value.trim(), empId: $('#pf-id').value.trim(), dept: $('#pf-dept').value.trim() };
+  profile = { name: $('#pf-name').value.trim(), dept: $('#pf-dept').value.trim() };
   store.set('ci.profile', profile); renderHello(); toast('บันทึกข้อมูลผู้เช็คอินแล้ว');
 };
 const readSheetForm = () => {
