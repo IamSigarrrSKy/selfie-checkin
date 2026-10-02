@@ -147,6 +147,13 @@ function onOpen() {
     .addToUi();
 }
 
+// สคริปต์ที่ไม่ได้สร้างจากเมนู ส่วนขยาย ของ Sheet: onOpen ปกติไม่ทำงาน ต้องติดตั้ง trigger เปิดไฟล์ให้แทน
+function installMenuTrigger(ss) {
+  if (SpreadsheetApp.getActiveSpreadsheet()) return;   // สคริปต์ผูกกับ Sheet อยู่แล้ว เมนูขึ้นเอง
+  const has = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'onOpen');
+  if (!has) ScriptApp.newTrigger('onOpen').forSpreadsheet(ss).onOpen().create();
+}
+
 // ลบทั้งแถว (รวมคอลัมน์ที่ซ่อนอยู่) ของแถวที่เลือกในแท็บเช็คอินหรือการลา
 function deleteSelectedRows() {
   const ui = SpreadsheetApp.getUi(), sh = SpreadsheetApp.getActiveSheet();
@@ -216,6 +223,7 @@ function cleanupBlankRows(silent) {
 function setup() {
   const ss = book();
   cleanupBlankRows(true);
+  installMenuTrigger(ss);
   ss.setSpreadsheetLocale('th_TH');
   ss.setSpreadsheetTimeZone('Asia/Bangkok');
   buildLog(ss);
