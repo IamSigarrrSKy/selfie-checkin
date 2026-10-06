@@ -74,8 +74,9 @@ function doPost(e) {
     if (req.action === 'update') {
       const r = req.record, row = findRow(sh, r.id);
       if (!row) return out({ ok: true, missing: true });   // ถูกลบออกจาก Sheet ไปแล้ว: ไม่ต้องทำอะไร
-      const cur = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
-      sh.getRange(row, 1, 1, HEADERS.length).setValues([toRow(r, cur[COL_PHOTO_URL - 1], cur[COL_CREATED - 1])]);
+      // แอปแก้ได้แค่เวลาเช็คเอาท์: เขียนเฉพาะวันที่/เวลา ช่องอื่นที่หัวหน้าแก้ใน Sheet ไม่ถูกทับ
+      if (r.type !== 'เช็คเอาท์' && r.type !== 'ออกงาน') return out({ ok: true, skipped: true });
+      sh.getRange(row, 2, 1, 2).setValues([[dateSerial(r.date), timeSerial(r.time)]]);
       return out({ ok: true });
     }
 
@@ -156,8 +157,43 @@ function onOpen() {
 // สคริปต์ที่ไม่ได้สร้างจากเมนู ส่วนขยาย ของ Sheet: onOpen ปกติไม่ทำงาน ต้องติดตั้ง trigger เปิดไฟล์ให้แทน
 function installMenuTrigger(ss) {
   if (SpreadsheetApp.getActiveSpreadsheet()) return;   // สคริปต์ผูกกับ Sheet อยู่แล้ว เมนูขึ้นเอง
-  const has = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'onOpen');
-  if (!has) ScriptApp.newTrigger('onOpen').forSpreadsheet(ss).onOpen().create();
+  const handlers = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction());
+  if (handlers.indexOf('onOpen') < 0) ScriptApp.newTrigger('onOpen').forSpreadsheet(ss).onOpen().create();
+  if (handlers.indexOf('onSheetEdit') < 0) ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create();
+}
+
+// หัวหน้าแก้หรือเพิ่มแถวเองในแท็บเช็คอิน/การลา: เติม ID ภาค ประเภท และแปลงวันที่/เวลาที่พิมพ์ให้เป็นค่าวันที่จริง
+function onSheetEdit(e) {
+  const sh = e && e.range && e.range.getSheet();
+  if (!sh || [LOG, LEAVE].indexOf(sh.getName()) < 0) return;
+  const first = Math.max(2, e.range.getRow()), last = e.range.getLastRow();
+  if (last < first) return;
+  const n = last - first + 1, width = sh.getName() === LOG ? HEADERS.length : LEAVE_HEADERS.length;
+  const vals = sh.getRange(first, 1, n, width).getValues();
+  vals.forEach((v, i) => {
+    if (v[1] === '' || v[1] === null) return;   // ไม่มีวันที่ = แถวว่าง
+    const row = first + i;
+    if (!v[0]) sh.getRange(row, 1).setValue('manual-' + Date.now().toString(36) + i);
+    if (typeof v[1] === 'string') sh.getRange(row, 2).setValue(dateSerial(v[1].trim()));
+    if (sh.getName() === LOG) {
+      if (typeof v[2] === 'string' && v[2]) sh.getRange(row, 3).setValue(timeSerial(v[2].trim()));
+      if (!v[3]) sh.getRange(row, 4).setValue('เช็คอิน');
+      if (!v[COL_REGION - 1] || (e.range.getColumn() <= 7 && e.range.getLastColumn() >= 7)) {
+        sh.getRange(row, COL_REGION).setValue(regionOf(v[6]));
+      }
+    }
+  });
+}
+
+// แท็บที่เป็นสูตร: ขึ้นคำเตือนเมื่อมีคนพิมพ์ทับ (ให้ไปแก้ที่แท็บเช็คอิน/การลาแทน)
+function protectFormulaTabs(ss, names) {
+  names.forEach(name => {
+    const sh = ss.getSheetByName(name);
+    if (!sh) return;
+    sh.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(p => p.remove());
+    sh.protect().setDescription('แท็บนี้คำนวณอัตโนมัติ แก้ข้อมูลที่แท็บ "' + LOG + '" หรือ "' + LEAVE + '" แทน')
+      .setWarningOnly(true);
+  });
 }
 
 // ลบทั้งแถว (รวมคอลัมน์ที่ซ่อนอยู่) ของแถวที่เลือกในแท็บเช็คอินหรือการลา
@@ -249,6 +285,7 @@ function setup() {
   ss.getSheets().forEach(s => {
     if (order.indexOf(s.getName()) < 0 && s.getLastRow() === 0 && s.getLastColumn() === 0) ss.deleteSheet(s);
   });
+  protectFormulaTabs(ss, [MONTHLY, DAILY, LEAVE_SUM].concat(regionNames, [SITES]));
   ss.setActiveSheet(ss.getSheetByName(MONTHLY));
 }
 

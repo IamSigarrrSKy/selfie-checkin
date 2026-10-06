@@ -1022,7 +1022,7 @@ function openDetail(id) {
     </dl>
     ${r.origTs ? `<div class="note">แก้ไขเวลาจากเดิม ${thShort.format(new Date(r.origTs))} ${hms(new Date(r.origTs))} · รูปยังแสดงเวลาที่ถ่ายจริง</div>` : ''}
     <div class="btns">
-      <button class="btn primary" id="detail-edit" style="flex:1">แก้ไขรายการ</button>
+      ${isCheckout(r) ? '<button class="btn primary" id="detail-edit" style="flex:1">แก้เวลาเช็คเอาท์</button>' : ''}
       <button class="btn danger" id="detail-del" style="flex:1">ลบรายการ</button>
     </div>
     <div class="btns">
@@ -1031,23 +1031,25 @@ function openDetail(id) {
     ${r.photoUrl ? `<a class="btn" target="_blank" rel="noopener" href="${esc(r.photoUrl)}">เปิดรูปใน Google Drive</a>` : ''}`;
   $('#detail').hidden = false;
   $('#detail-close').onclick = () => $('#detail').hidden = true;
-  $('#detail-edit').onclick = () => openEdit(id);
+  if ($('#detail-edit')) $('#detail-edit').onclick = () => openEdit(id);
   $('#detail-del').onclick = e => confirmTap(e.currentTarget, 'กดอีกครั้งเพื่อลบ (ลบใน Sheet ด้วย)', () => deleteRecord(id));
 }
 
+// แก้ได้เฉพาะเวลาของรายการเช็คเอาท์ (ลืมเช็คเอาท์) แล้วส่งไปแก้ใน Sheet ด้วย
+const isCheckout = r => r.type === 'checkout' || r.type === 'out';
 function openEdit(id) {
-  const r = records.find(x => x.id === id); if (!r) return;
+  const r = records.find(x => x.id === id); if (!r || !isCheckout(r)) return;
   const d = new Date(r.ts);
   $('#detail-card').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <b style="font-size:18px">แก้ไขรายการ</b>
+      <b style="font-size:18px">แก้เวลาเช็คเอาท์</b>
       <button class="btn sm" id="edit-back">ยกเลิก</button>
     </div>
     <form id="edit-form" style="display:flex;flex-direction:column;gap:12px">
-      <div class="field"><label for="ed-ts">วันและเวลา</label>
-        <input class="input num" type="datetime-local" step="1" id="ed-ts" value="${dayKey(d)}T${hms(d)}" required></div>
-      <div class="field"><label>สถานที่</label><div class="note">${esc(placeOf(r))}</div></div>
-      <div class="field"><label for="ed-note">หมายเหตุ</label><textarea class="input" id="ed-note" rows="2">${esc(r.note)}</textarea></div>
+      <div class="note">${thDate.format(d)} · ${esc(placeOf(r))}</div>
+      <div class="field"><label for="ed-time">เวลาเช็คเอาท์</label>
+        <input class="input num" type="time" step="1" id="ed-time" value="${hms(d)}" required></div>
+      <div class="note">เวลาใหม่จะถูกแก้ใน Google Sheet ด้วย</div>
       <div class="btns">
         <button type="button" class="btn danger" id="ed-del">ลบรายการ</button>
         <span style="flex:1"></span>
@@ -1058,12 +1060,14 @@ function openEdit(id) {
   $('#ed-del').onclick = e => confirmTap(e.currentTarget, 'กดอีกครั้งเพื่อลบ', () => deleteRecord(id));
   $('#edit-form').onsubmit = e => {
     e.preventDefault();
-    const ts = new Date($('#ed-ts').value).getTime();
-    if (isNaN(ts)) { toast('วันและเวลาไม่ถูกต้อง'); return; }
+    const t = ($('#ed-time').value || '').split(':').map(Number);
+    if (t.length < 2 || t.some(isNaN)) { toast('เวลาไม่ถูกต้อง'); return; }
+    const nd = new Date(d); nd.setHours(t[0], t[1], t[2] || 0, 0);
+    const ts = nd.getTime();
     if (ts !== r.ts && !r.origTs) r.origTs = r.ts;
-    r.ts = ts; r.note = $('#ed-note').value.trim();
+    r.ts = ts;
     r.editedAt = Date.now(); if (r.synced) r.dirty = true;
-    persistRecords(); renderAll(); openDetail(id); toast('บันทึกการแก้ไขแล้ว'); syncAll();
+    persistRecords(); renderAll(); openDetail(id); toast('แก้เวลาเช็คเอาท์แล้ว'); syncAll();
   };
 }
 
