@@ -325,7 +325,9 @@ function buildLog(ss) {
   const all = sh.getRange(2, 1, rows, n);
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$O2="ใช่"')
-      .setFontColor(C.muted).setItalic(true).setRanges([all]).build()
+      .setFontColor(C.muted).setItalic(true).setRanges([all]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('เช็คเอาท์')
+      .setFontColor('#a15c00').setBold(true).setRanges([sh.getRange(2, 4, rows, 1)]).build()
   ]);
   return sh;
 }
@@ -335,7 +337,7 @@ function buildDaily(ss) {
   const sh = sheet(ss, DAILY);
   sh.clear();
   const L = "'" + LOG + "'!";
-  const head = ['วันที่', 'สถานที่', 'เช็คอินครั้งแรก', 'ล่าสุด', 'จำนวนครั้ง', 'หมายเหตุ'];
+  const head = ['วันที่', 'สถานที่', 'เช็คอิน', 'เช็คเอาท์', 'จำนวนครั้ง', 'หมายเหตุ'];
   trimColumns(sh, head.length);
   sh.getRange(1, 1, 1, head.length).setValues([head]);
   styleHeader(sh, 1, head.length);
@@ -343,8 +345,8 @@ function buildDaily(ss) {
   const real = L + 'O2:O,"<>ใช่"';   // ไม่นับรายการโหมดทดสอบ
   sh.getRange('A2').setFormula('=IFERROR(SORT(UNIQUE(FILTER(' + L + 'B2:B,' + L + 'B2:B<>"",' + L + 'O2:O<>"ใช่")),1,FALSE),)');
   sh.getRange('B2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,IFERROR(TEXTJOIN(", ",TRUE,UNIQUE(FILTER(' + L + 'G2:G,' + L + 'B2:B=d,' + L + 'O2:O<>"ใช่"))),))))');
-  sh.getRange('C2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,LET(v,MINIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + real + '),IF(v=0,,v)))))');
-  sh.getRange('D2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,LET(v,MAXIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + real + '),IF(v=0,,v)))))');
+  sh.getRange('C2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,LET(v,MINIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + L + 'D2:D,"<>เช็คเอาท์",' + L + 'D2:D,"<>ออกงาน",' + real + '),IF(v=0,,v)))))');
+  sh.getRange('D2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,LET(v,MAX(MAXIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + L + 'D2:D,"เช็คเอาท์",' + real + '),MAXIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + L + 'D2:D,"ออกงาน",' + real + ')),IF(v=0,,v)))))');
   sh.getRange('E2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,COUNTIFS(' + L + 'B2:B,d,' + real + '))))');
   sh.getRange('F2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,IFERROR(TEXTJOIN(" / ",TRUE,FILTER(' + L + 'M2:M,' + L + 'B2:B=d,' + L + 'M2:M<>"",' + L + 'O2:O<>"ใช่")),))))');
 
@@ -371,7 +373,7 @@ function buildMonthly(ss) {
     .setFontColor(C.muted);
   sh.setRowHeight(1, 34);
 
-  const head = ['เดือน', 'วันที่เช็คอิน', 'จำนวนครั้ง', 'ครั้งแรกเฉลี่ย', 'สถานที่'];
+  const head = ['เดือน', 'วันที่เช็คอิน', 'จำนวนครั้ง', 'เช็คอินเฉลี่ย', 'สถานที่'];
   trimColumns(sh, head.length);
   sh.getRange(4, 1, 1, head.length).setValues([head]);
   styleHeader(sh, 4, head.length);
@@ -404,7 +406,7 @@ function buildRegion(ss, name) {
   sh.getBandings().forEach(b => b.remove());
   const L = "'" + LOG + "'!", R = '$A$1';
   const real = L + 'S2:S=' + R + ',' + L + 'O2:O<>"ใช่",' + L + 'B2:B<>""';   // รายการของภาคนี้ ไม่รวมโหมดทดสอบ
-  const head = ['วันที่', 'เวลา', 'สถานที่', 'หมายเหตุ', 'รูป'];
+  const head = ['วันที่', 'เวลา', 'ประเภท', 'สถานที่', 'หมายเหตุ', 'รูป'];
   trimColumns(sh, Math.max(head.length, 6));
   sh.setTabColor(REGION_TAB_COLORS[name] || C.muted);
 
@@ -426,19 +428,23 @@ function buildRegion(ss, name) {
   // ตารางรายการ: เรียงใหม่สุดก่อน
   sh.getRange(5, 1, 1, head.length).setValues([head]);
   styleHeader(sh, 5, head.length);
-  const cols = ['B', 'C', 'G', 'M', 'T'].map(c => L + c + '2:' + c).join(',');
+  const cols = ['B', 'C', 'D', 'G', 'M', 'T'].map(c => L + c + '2:' + c).join(',');
   sh.getRange('A6').setFormula('=IFERROR(LET(f,FILTER({' + cols + '},' + real + '),s,SORT(f,1,FALSE,2,FALSE),' +
-    'HSTACK(CHOOSECOLS(s,1,2,3,4),' +
-    'MAP(CHOOSECOLS(s,5),LAMBDA(u,IF(u="","",HYPERLINK(u,"ดูรูป")))))),"ยังไม่มีรายการ")');
+    'HSTACK(CHOOSECOLS(s,1,2,3,4,5),' +
+    'MAP(CHOOSECOLS(s,6),LAMBDA(u,IF(u="","",HYPERLINK(u,"ดูรูป")))))),"ยังไม่มีรายการ")');
 
   const rows = sh.getMaxRows() - 5;
   sh.getRange(6, 1, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
   sh.getRange(6, 2, rows, 1).setNumberFormat('HH:mm').setHorizontalAlignment('center');
-  sh.getRange(6, 5, rows, 1).setHorizontalAlignment('center');
-  sh.getRange(6, 3, rows, 2).setWrap(true);
-  [130, 70, 320, 260, 70, 90].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  sh.getRange(6, 3, rows, 1).setHorizontalAlignment('center');
+  sh.getRange(6, 6, rows, 1).setHorizontalAlignment('center');
+  sh.getRange(6, 4, rows, 2).setWrap(true);
+  [130, 70, 90, 300, 240, 70].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(6, 1, rows, head.length));
-  sh.setConditionalFormatRules([]);
+  sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('เช็คเอาท์')
+      .setFontColor('#a15c00').setBold(true).setRanges([sh.getRange(6, 3, rows, 1)]).build()
+  ]);
   return sh;
 }
 

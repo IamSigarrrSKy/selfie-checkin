@@ -87,6 +87,8 @@ button{cursor:pointer}
 .cta:active{transform:scale(.985)}
 .cta svg{width:24px;height:24px}
 .cta.out{background:var(--fg);color:var(--bg);box-shadow:none}
+.cta-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cta-row .cta{padding:16px 10px;font-size:17px}
 .cta:disabled{opacity:.5;cursor:not-allowed}
 .hint{font-size:13px;color:var(--muted);text-align:center;margin-top:-4px}
 
@@ -233,17 +235,23 @@ button{cursor:pointer}
       </div>
     </div>
 
-    <button class="cta" id="cta" disabled>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-      <span id="cta-label">ถ่ายเซลฟี่ เช็คอิน</span>
-    </button>
+    <div class="cta-row">
+      <button class="cta" id="cta" data-type="checkin" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span>เช็คอิน</span>
+      </button>
+      <button class="cta out" id="cta-out" data-type="checkout" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span>เช็คเอาท์</span>
+      </button>
+    </div>
     <div class="hint" id="cta-hint">รอสัญญาณตำแหน่งก่อนถ่ายรูป</div>
 
     <div class="sec-title">วันนี้</div>
     <div class="card today">
-      <div><div class="lbl">เช็คอิน</div><div class="val" id="t-count">–</div></div>
-      <div><div class="lbl">ครั้งแรก</div><div class="val" id="t-first">–</div></div>
-      <div><div class="lbl">ล่าสุด</div><div class="val" id="t-last">–</div></div>
+      <div><div class="lbl">เช็คอิน</div><div class="val" id="t-first">–</div></div>
+      <div><div class="lbl">เช็คเอาท์</div><div class="val" id="t-last">–</div></div>
+      <div><div class="lbl">ทั้งหมด</div><div class="val" id="t-count">–</div></div>
     </div>
     <div class="card list" id="today-list"></div>
   </section>
@@ -677,7 +685,7 @@ function renderStatus() {
   $('#m-coord').textContent = pos ? `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}` : '–';
   $('#m-acc').textContent  = pos ? (pos.manual ? 'ปักหมุดเอง' : `±${pos.acc} ม.`) : '–';
 
-  $('#cta').disabled = !canGo;
+  $('#cta').disabled = !canGo; $('#cta-out').disabled = !canGo;
   $('#cta-hint').textContent = hint;
   $('#mode-chip').hidden = !demoOn();
   $('#mode-chip').className = 'chip warn';
@@ -685,7 +693,8 @@ function renderStatus() {
 
 function recordRow(r) {
   const d = new Date(r.ts);
-  const chips = (r.mock ? '<span class="chip">ทดสอบ</span>' : '')
+  const chips = (r.type === 'checkout' || r.type === 'out' ? `<span class="chip warn">${typeLabel(r.type)}</span>` : '')
+    + (r.mock ? '<span class="chip">ทดสอบ</span>' : '')
     + (r.editedAt ? '<span class="chip">แก้ไข</span>' : '')
     + (settings.scriptUrl && (!r.synced || r.dirty) ? '<span class="chip">รอส่ง</span>' : '');
   return `<button class="row" data-id="${r.id}">
@@ -706,8 +715,10 @@ function renderToday() {
   $('#leave-chip').hidden = !lt;
   if (lt) { $('#leave-chip').textContent = `วันนี้${LEAVE_TYPES[lt.type]}`; $('#leave-chip').className = `chip ${lt.type === 'sick' ? 'sick' : 'vac'}`; }
   $('#t-count').textContent = t.length ? `${t.length} ครั้ง` : '–';
-  $('#t-first').textContent = t.length ? hm(new Date(t[0].ts)) : '–';
-  $('#t-last').textContent  = t.length ? hm(new Date(t[t.length - 1].ts)) : '–';
+  const fin = t.find(r => r.type !== 'checkout' && r.type !== 'out');
+  const lout = [...t].reverse().find(r => r.type === 'checkout' || r.type === 'out');
+  $('#t-first').textContent = fin ? hm(new Date(fin.ts)) : '–';
+  $('#t-last').textContent  = lout ? hm(new Date(lout.ts)) : '–';
   $('#today-list').innerHTML = t.length
     ? [...t].reverse().map(recordRow).join('')
     : '<div class="empty"><b>ยังไม่ได้เช็คอินวันนี้</b>กดปุ่มด้านบนเพื่อถ่ายเซลฟี่และบันทึกสถานที่</div>';
@@ -721,14 +732,18 @@ function renderHello() {
 }
 
 /* ---------- camera ---------- */
-let stream = null, shotData = null, shotMeta = null;
+let stream = null, shotData = null, shotMeta = null, camType = 'checkin';
+const TYPE_LABEL = { checkin: 'เช็คอิน', checkout: 'เช็คเอาท์', in: 'เข้างาน', out: 'ออกงาน' };
+const typeLabel = t => TYPE_LABEL[t] || 'เช็คอิน';
 
-async function openCamera() {
+async function openCamera(type) {
+  if (type === 'checkin' || type === 'checkout') camType = type;
   if (!pos) return;
   if (!IS_ADMIN && !(evalRes && evalRes.inRange)) return;   // ลิงก์ A: เฉพาะในรัศมีจุดที่กำหนด
   $('#cam').hidden = false; document.body.style.overflow = 'hidden';
   liveMode();
-  $('#cam-tag').textContent = `เช็คอิน · ${currentPlace()}`;
+  $('#cam-tag').textContent = `${typeLabel(camType)} · ${currentPlace()}`;
+  $('#confirm').textContent = `ยืนยัน${typeLabel(camType)}`;
   const msg = $('#cam-msg');
   if (!navigator.mediaDevices?.getUserMedia) {
     msg.hidden = false; msg.textContent = 'เบราว์เซอร์นี้เปิดกล้องไม่ได้ ต้องเปิดผ่าน https หรือ localhost'; return;
@@ -781,9 +796,9 @@ function drawWatermark(x, W, H, now) {
   const F = '"IBM Plex Sans Thai", Tahoma, sans-serif', M = '"IBM Plex Mono", Consolas, monospace';
   x.textBaseline = 'alphabetic';
   // pill สถานะ
-  const pill = 'เช็คอิน';
+  const pill = typeLabel(shotMeta.type);
   x.font = `700 26px ${F}`; const pw = x.measureText(pill).width + 32;
-  x.fillStyle = '#5fc4b3'; roundRect(x, 28, y0 + 6, pw, 42, 21); x.fill();
+  x.fillStyle = shotMeta.type === 'checkout' ? '#f0b35a' : '#5fc4b3'; roundRect(x, 28, y0 + 6, pw, 42, 21); x.fill();
   x.fillStyle = '#06201c'; x.fillText(pill, 44, y0 + 36);
   x.fillStyle = '#ffffff'; x.font = `600 56px ${M}`; x.fillText(hms(now), 28 + pw + 18, y0 + 46);
   x.font = `500 24px ${F}`; x.fillStyle = '#d7e7e3'; x.fillText(thDate.format(now), 28, y0 + 92);
@@ -825,7 +840,7 @@ function useUploadedPhoto(file) {
 }
 
 function snapshotMeta(ts, source) {
-  return { ts, pos: { ...pos }, place: currentPlace(), site: evalRes ? evalRes.site : null,
+  return { ts, type: camType, pos: { ...pos }, place: currentPlace(), site: evalRes ? evalRes.site : null,
     dist: evalRes ? evalRes.dist : null, inRange: !!(evalRes && evalRes.inRange), source };
 }
 
@@ -836,7 +851,7 @@ function confirmShot() {
   if (!shotData || !shotMeta) return;
   const note = $('#cam-note').value.trim();
   const r = {
-    id: uid(), type: 'checkin', ts: shotMeta.ts, place: shotMeta.place,
+    id: uid(), type: shotMeta.type, ts: shotMeta.ts, place: shotMeta.place,
     lat: shotMeta.pos.lat, lng: shotMeta.pos.lng, acc: shotMeta.pos.acc, mock: !!shotMeta.pos.mock,
     siteId: shotMeta.site ? shotMeta.site.id : '', siteName: shotMeta.site ? shotMeta.site.name : '',
     dist: shotMeta.dist == null ? null : Math.round(shotMeta.dist), inRange: shotMeta.inRange,
@@ -848,7 +863,7 @@ function confirmShot() {
     records.pop(); toast('พื้นที่เก็บข้อมูลในเครื่องเต็ม ส่งออก CSV แล้วล้างประวัติเก่าก่อน'); return;
   }
   closeCamera(); renderAll();
-  toast(saved ? `เช็คอินแล้ว ${hm(new Date(r.ts))} น.` : 'บันทึกชั่วคราวเท่านั้น เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล');
+  toast(saved ? `${typeLabel(r.type)}แล้ว ${hm(new Date(r.ts))} น.` : 'บันทึกชั่วคราวเท่านั้น เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล');
   syncAll();
 }
 
@@ -890,7 +905,7 @@ function parseReply(txt) {
 function sheetRow(r) {
   const d = new Date(r.ts);
   return {
-    id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : r.type === 'out' ? 'ออกงาน' : 'เช็คอิน',
+    id: r.id, date: dayKey(d), time: hms(d), type: typeLabel(r.type),
     name: r.name || '', empId: '', site: placeOf(r), dist: r.dist ?? '', inRange: r.inRange ? 'ใช่' : 'ไม่',
     lat: r.lat, lng: r.lng, acc: '', note: r.note || '', mock: r.mock ? 'ใช่' : '', link: r.link || 'A',
     editedAt: r.editedAt ? `${dayKey(new Date(r.editedAt))} ${hms(new Date(r.editedAt))}` : '',
@@ -970,7 +985,7 @@ function openDetail(id) {
   const d = new Date(r.ts);
   $('#detail-card').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <b style="font-size:18px">เช็คอิน <span class="num">${hms(d)}</span></b>
+      <b style="font-size:18px">${typeLabel(r.type)} <span class="num">${hms(d)}</span></b>
       <button class="btn sm" id="detail-close">ปิด</button>
     </div>
     <img src="${r.photo}" alt="รูปเช็คอิน">
@@ -1033,11 +1048,11 @@ function openEdit(id) {
 
 function exportCSV() {
   if (!records.length) { toast('ยังไม่มีรายการให้ส่งออก'); return; }
-  const head = ['วันที่', 'เวลา', 'ชื่อ', 'สถานที่', 'จุดใกล้สุด', 'ระยะ(ม.)', 'อยู่ในจุดที่บันทึก', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ(ม.)', 'หมายเหตุ', 'ทดสอบ'];
+  const head = ['วันที่', 'เวลา', 'ประเภท', 'ชื่อ', 'สถานที่', 'จุดใกล้สุด', 'ระยะ(ม.)', 'อยู่ในจุดที่บันทึก', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ(ม.)', 'หมายเหตุ', 'ทดสอบ'];
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = [...records].sort((a, b) => a.ts - b.ts).map(r => {
     const d = new Date(r.ts);
-    return [dayKey(d), hms(d), r.name, placeOf(r), r.siteName, r.dist, r.inRange ? 'ใช่' : 'ไม่', r.lat, r.lng, r.acc, r.note, r.mock ? 'ใช่' : ''].map(q).join(',');
+    return [dayKey(d), hms(d), typeLabel(r.type), r.name, placeOf(r), r.siteName, r.dist, r.inRange ? 'ใช่' : 'ไม่', r.lat, r.lng, r.acc, r.note, r.mock ? 'ใช่' : ''].map(q).join(',');
   });
   const blob = new Blob(['﻿' + [head.map(q).join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -1204,7 +1219,8 @@ function renderAll() { renderHello(); renderStatus(); renderToday(); renderHisto
 
 /* ---------- events ---------- */
 document.querySelectorAll('.nav button').forEach(b => b.onclick = () => show(b.dataset.pg));
-$('#cta').onclick = openCamera;
+$('#cta').onclick = () => openCamera('checkin');
+$('#cta-out').onclick = () => openCamera('checkout');
 $('#cam-close').onclick = closeCamera;
 $('#shutter').onclick = capture;
 $('#pin-toggle').onclick = () => setManualPin(!manualPin);
