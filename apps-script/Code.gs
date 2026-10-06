@@ -106,7 +106,7 @@ function timeSerial(s) {
 function toRow(r, photoUrl, created) {
   const photo = photoUrl ? '=HYPERLINK("' + photoUrl + '","ดูรูป")' : '';
   return [r.id, dateSerial(r.date), timeSerial(r.time), r.type, r.name, '', r.site, r.dist, r.inRange,
-    r.lat, r.lng, r.acc, r.note, photo, r.mock, created, "", "",   // ไม่บันทึกประวัติการแก้ไขลง Sheet
+    r.lat, r.lng, '', r.note, photo, r.mock, created, "", "",   // ไม่บันทึกประวัติการแก้ไขลง Sheet
     regionOf(r.site), photoUrl || '', r.link || 'A'];
 }
 
@@ -286,6 +286,8 @@ function buildLog(ss) {
   sh.hideColumns(17, 2);           // คอลัมน์ประวัติการแก้ไข (ไม่ใช้แล้ว)
   sh.hideColumns(6);               // รหัสพนักงาน (ไม่ใช้)
   if (sh.getLastRow() > 1) sh.getRange(2, 6, sh.getLastRow() - 1, 1).clearContent();
+  sh.hideColumns(12);              // ความแม่นยำ GPS (ไม่ใช้)
+  if (sh.getLastRow() > 1) sh.getRange(2, 12, sh.getLastRow() - 1, 1).clearContent();
   if (sh.getLastRow() > 1) sh.getRange(2, 17, sh.getLastRow() - 1, 2).clearContent();
 
   // เติมภาคให้แถวเก่าที่ยังไม่มี

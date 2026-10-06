@@ -886,7 +886,7 @@ function sheetRow(r) {
   return {
     id: r.id, date: dayKey(d), time: hms(d), type: r.type === 'in' ? 'เข้างาน' : r.type === 'out' ? 'ออกงาน' : 'เช็คอิน',
     name: r.name || '', empId: '', site: placeOf(r), dist: r.dist ?? '', inRange: r.inRange ? 'ใช่' : 'ไม่',
-    lat: r.lat, lng: r.lng, acc: r.acc, note: r.note || '', mock: r.mock ? 'ใช่' : '', link: r.link || 'A',
+    lat: r.lat, lng: r.lng, acc: '', note: r.note || '', mock: r.mock ? 'ใช่' : '', link: r.link || 'A',
     editedAt: r.editedAt ? `${dayKey(new Date(r.editedAt))} ${hms(new Date(r.editedAt))}` : '',
     origTime: r.origTs ? `${dayKey(new Date(r.origTs))} ${hms(new Date(r.origTs))}` : ''
   };
