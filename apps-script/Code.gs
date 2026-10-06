@@ -81,7 +81,13 @@ function doPost(e) {
 
     if (req.action === 'delete') {
       const row = findRow(sh, req.id);
-      if (row) sh.deleteRow(row);
+      if (row) {
+        // ย้ายรูปของรายการนี้ไปถังขยะใน Drive (กู้คืนได้ 30 วัน)
+        const url = String(sh.getRange(row, COL_PHOTO_URL).getValue() || '');
+        const fid = (url.match(/\/d\/([^/]+)/) || [])[1];
+        if (fid) { try { DriveApp.getFileById(fid).setTrashed(true); } catch (e) { /* ไฟล์ถูกลบไปแล้ว */ } }
+        sh.deleteRow(row);
+      }
       return out({ ok: true });
     }
 

@@ -113,6 +113,11 @@ button{cursor:pointer}
 .list{display:flex;flex-direction:column}
 .row{display:flex;gap:12px;align-items:center;padding:12px 14px;border:0;background:none;width:100%;text-align:left}
 .row+.row{border-top:1px solid var(--line)}
+.row{cursor:pointer}
+.row-del{flex:none;display:grid;place-items:center;min-width:36px;height:36px;padding:0 8px;border:1px solid transparent;border-radius:10px;background:none;color:var(--muted);font-size:13px;font-weight:700}
+.row-del svg{width:18px;height:18px}
+.row-del:hover{color:var(--bad);border-color:var(--line)}
+.row-del.armed{background:var(--bad);color:#fff}
 .thumb{flex:none;width:52px;height:52px;border-radius:12px;object-fit:cover;background:var(--surface-2)}
 .row-main{flex:1;min-width:0}
 .row-title{font-weight:600;display:flex;gap:8px;align-items:center}
@@ -513,6 +518,7 @@ function toast(msg) {
 }
 
 const ICON = {
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   pin:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
   ok:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><path d="m9 9.5 2 2 4-4"/></svg>',
   warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>',
@@ -697,14 +703,31 @@ function recordRow(r) {
     + (r.mock ? '<span class="chip">ทดสอบ</span>' : '')
     + (r.editedAt ? '<span class="chip">แก้ไข</span>' : '')
     + (settings.scriptUrl && (!r.synced || r.dirty) ? '<span class="chip">รอส่ง</span>' : '');
-  return `<button class="row" data-id="${r.id}">
+  return `<div class="row" data-id="${r.id}" role="button" tabindex="0">
     <img class="thumb" src="${r.photo}" alt="">
     <div class="row-main">
       <div class="row-title" style="min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(placeOf(r))}</span> ${chips}</div>
       <div class="row-sub">${r.note ? esc(r.note) : (r.inRange ? 'จุดที่บันทึกไว้' : `ห่างจาก ${esc(r.siteName)} ${fmtDist(r.dist)}`)}</div>
     </div>
     <div class="row-time">${hm(d)}</div>
-  </button>`;
+    <button type="button" class="row-del" data-del-id="${r.id}" aria-label="ลบรายการนี้">${ICON.trash}</button>
+  </div>`;
+}
+
+// ลบรายการ: ลบในเครื่อง แล้วส่งคำสั่งลบไป Sheet (แถวใน Sheet และรูปใน Drive)
+function deleteRecord(id) {
+  const r = records.find(x => x.id === id); if (!r) return;
+  records = records.filter(x => x.id !== id); persistRecords();
+  if (r.synced) { pendingDeletes.push(id); store.set('ci.pendingDeletes', pendingDeletes); }
+  $('#detail').hidden = true; renderAll();
+  toast(r.synced ? 'ลบแล้ว กำลังลบออกจาก Sheet' : 'ลบรายการแล้ว'); syncAll();
+}
+
+// ปุ่มที่ต้องกดสองครั้ง: ครั้งแรกขึ้นข้อความยืนยัน ครั้งที่สองทำงาน
+function confirmTap(b, armedText, run) {
+  if (b.classList.contains('armed')) { run(); return; }
+  const html = b.innerHTML; b.classList.add('armed'); b.textContent = armedText;
+  setTimeout(() => { if (b.isConnected) { b.classList.remove('armed'); b.innerHTML = html; } }, 3000);
 }
 
 const placeOf = r => r.place || r.siteName || '';
@@ -1000,12 +1023,16 @@ function openDetail(id) {
     ${r.origTs ? `<div class="note">แก้ไขเวลาจากเดิม ${thShort.format(new Date(r.origTs))} ${hms(new Date(r.origTs))} · รูปยังแสดงเวลาที่ถ่ายจริง</div>` : ''}
     <div class="btns">
       <button class="btn primary" id="detail-edit" style="flex:1">แก้ไขรายการ</button>
+      <button class="btn danger" id="detail-del" style="flex:1">ลบรายการ</button>
+    </div>
+    <div class="btns">
       <a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${r.lat},${r.lng}" style="flex:1">ดูใน Google Maps</a>
     </div>
     ${r.photoUrl ? `<a class="btn" target="_blank" rel="noopener" href="${esc(r.photoUrl)}">เปิดรูปใน Google Drive</a>` : ''}`;
   $('#detail').hidden = false;
   $('#detail-close').onclick = () => $('#detail').hidden = true;
   $('#detail-edit').onclick = () => openEdit(id);
+  $('#detail-del').onclick = e => confirmTap(e.currentTarget, 'กดอีกครั้งเพื่อลบ (ลบใน Sheet ด้วย)', () => deleteRecord(id));
 }
 
 function openEdit(id) {
@@ -1028,13 +1055,7 @@ function openEdit(id) {
       </div>
     </form>`;
   $('#edit-back').onclick = () => openDetail(id);
-  $('#ed-del').onclick = e => {
-    const b = e.currentTarget;
-    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อลบ'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ลบรายการ'; }, 3000); return; }
-    records = records.filter(x => x.id !== id); persistRecords();
-    if (r.synced) { pendingDeletes.push(id); store.set('ci.pendingDeletes', pendingDeletes); }
-    $('#detail').hidden = true; renderAll(); toast('ลบรายการแล้ว'); syncAll();
-  };
+  $('#ed-del').onclick = e => confirmTap(e.currentTarget, 'กดอีกครั้งเพื่อลบ', () => deleteRecord(id));
   $('#edit-form').onsubmit = e => {
     e.preventDefault();
     const ts = new Date($('#ed-ts').value).getTime();
@@ -1241,7 +1262,16 @@ $('#retake').onclick = () => { if (stream) liveMode(); else openCamera(); };
 $('#upload-input').onchange = e => { useUploadedPhoto(e.target.files[0]); e.target.value = ''; };
 $('#confirm').onclick = confirmShot;
 $('#detail').onclick = e => { if (e.target.id === 'detail') $('#detail').hidden = true; };
-document.addEventListener('click', e => { const row = e.target.closest('.row[data-id]'); if (row) openDetail(row.dataset.id); });
+document.addEventListener('click', e => {
+  const del = e.target.closest('[data-del-id]');
+  if (del) { e.stopPropagation(); confirmTap(del, 'ลบ?', () => deleteRecord(del.dataset.delId)); return; }
+  const row = e.target.closest('.row[data-id]'); if (row) openDetail(row.dataset.id);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const row = e.target.closest && e.target.closest('.row[data-id]');
+  if (row && e.target === row) openDetail(row.dataset.id);
+});
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#detail').hidden) $('#detail').hidden = true; else if (!$('#cam').hidden) closeCamera(); } });
 
 $('#hist-filter').onclick = e => {
