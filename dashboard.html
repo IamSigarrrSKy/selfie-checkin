@@ -250,15 +250,18 @@ async function load() {
   }
 }
 
-// Apps Script ที่เพิ่งตื่นบางครั้งตอบเป็นหน้า HTML: ลองใหม่สูงสุด 3 ครั้ง
+// Apps Script ที่เพิ่งตื่นบางครั้งตอบเป็นหน้า HTML หรือค้าง: ตัดที่ 30 วินาที แล้วลองใหม่สูงสุด 3 ครั้ง
 async function request() {
   for (let i = 1; ; i++) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
     try {
-      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'dashboard', key, month }) });
+      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'dashboard', key, month }), signal: ctl.signal });
       return parseReply(await res.text());
     } catch (e) {
-      if (i >= 3) throw e;
+      if (i >= 3) throw e.name === 'AbortError' ? new Error('Google ตอบช้าเกินไป') : e;
       await new Promise(r => setTimeout(r, 1500 * i));
+    } finally {
+      clearTimeout(t);
     }
   }
 }
