@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0e5a52">
+<meta name="robots" content="noindex">
+<title>แดชบอร์ดเช็คอิน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: แถบหัว (เดือน) > การ์ดตัวเลข > วันนี้ + แผนที่ > กราฟรายวัน + ภาค > ตารางรายคน (ปฏิทินจุด) > การลา */
+:root{
+  --bg:#f3f6f4; --surface:#ffffff; --surface-2:#e8efec; --line:#d5e0db;
+  --fg:#14211e; --muted:#5b6d68;
+  --accent:#0e5a52; --accent-fg:#ffffff; --accent-soft:#d6ebe6;
+  --ok:#1d7a46; --ok-soft:#dcf1e3; --warn:#a15c00; --warn-soft:#fbecd3; --bad:#b4282f; --bad-soft:#fadcdd;
+  --vac:#2a6cb0; --vac-soft:#dce8f6;
+  --shadow:0 1px 2px rgba(14,40,36,.06),0 6px 20px rgba(14,40,36,.06);
+  --font:"IBM Plex Sans Thai",system-ui,"Leelawadee UI","Tahoma",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:16px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1513; --surface:#15201d; --surface-2:#1c2a26; --line:#2a3b36;
+  --fg:#e5efec; --muted:#93a7a1;
+  --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34;
+  --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c; --bad-soft:#3d1c1e;
+  --vac:#7fb2ea; --vac-soft:#1a2c40;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0d1513; --surface:#15201d; --surface-2:#1c2a26; --line:#2a3b36;
+  --fg:#e5efec; --muted:#93a7a1;
+  --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34;
+  --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c; --bad-soft:#3d1c1e;
+  --vac:#7fb2ea; --vac-soft:#1a2c40;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+
+.wrap{max-width:1240px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.top h1{margin:0;font-size:24px;font-weight:700;letter-spacing:-.01em}
+.top .sub{color:var(--muted);font-size:13.5px}
+.month{display:flex;align-items:center;gap:6px}
+.month b{min-width:150px;text-align:center;font-size:16px}
+.ibtn{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.ibtn:hover{background:var(--surface-2)}
+.ibtn:disabled{opacity:.4;cursor:default}
+.ibtn svg{width:18px;height:18px}
+.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;min-width:0}
+.card h2{margin:0 0 12px;font-size:15.5px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card h2 small{font-weight:500;color:var(--muted);font-size:13px}
+
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.kpi{padding:14px 16px}
+.kpi .l{color:var(--muted);font-size:13px}
+.kpi .v{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1.2;color:var(--accent)}
+.kpi .v small{font-family:var(--font);font-size:14px;color:var(--muted);font-weight:500;margin-left:4px}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+
+.g2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px}
+.g2b{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+#map{height:340px;border-radius:12px;border:1px solid var(--line);z-index:0}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12.5px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.c,th.c{text-align:center}
+.scroll{overflow-x:auto}
+.name{font-weight:600;white-space:nowrap}
+.site{color:var(--muted);font-size:13px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)}
+.p-wait{background:var(--surface-2);color:var(--muted)}
+.p-sick{background:var(--bad-soft);color:var(--bad)}
+.p-vac{background:var(--vac-soft);color:var(--vac)}
+a{color:var(--accent)}
+.empty{color:var(--muted);text-align:center;padding:28px 8px;font-size:14px}
+
+/* กราฟรายวัน */
+.bars{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:end;gap:3px;height:200px;padding-top:18px}
+.bar{position:relative;display:flex;flex-direction:column;justify-content:flex-end;height:100%;border-radius:6px 6px 0 0}
+.bar.we{background:var(--surface-2)}
+.bar i{display:block;background:var(--accent);border-radius:5px 5px 0 0;min-height:0}
+.bar.today i{background:var(--warn)}
+.bar b{position:absolute;top:-17px;left:0;right:0;text-align:center;font:600 11px var(--mono);color:var(--muted)}
+.axis{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;margin-top:4px}
+.axis span{text-align:center;font:500 10.5px var(--mono);color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+/* แยกตามภาค */
+.reg{display:flex;flex-direction:column;gap:10px}
+.reg-row .top2{display:flex;justify-content:space-between;font-size:14px}
+.reg-row .track{height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:4px}
+.reg-row .track i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+
+/* ปฏิทินจุดรายคน */
+.dots{display:grid;grid-auto-flow:column;grid-auto-columns:12px;gap:3px}
+.dot{width:12px;height:12px;border-radius:3px;background:var(--surface-2)}
+.dot.we{background:transparent;border:1px dashed var(--line)}
+.dot.in{background:var(--ok)}
+.dot.sick{background:var(--bad)}
+.dot.vac{background:var(--vac)}
+.dot.fut{opacity:.35}
+
+.lock{max-width:440px;margin:12vh auto 0;text-align:center}
+.lock input{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);margin:12px 0}
+.btn{padding:10px 18px;border-radius:12px;border:0;background:var(--accent);color:var(--accent-fg);font-weight:600}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:12px;padding:10px 14px;font-size:14px}
+
+@media (max-width:980px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.g2,.g2b{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .v{font-size:24px}.month b{min-width:120px}.top h1{font-size:20px}}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div>
+      <h1>แดชบอร์ดเช็คอิน</h1>
+      <div class="sub" id="updated">กำลังโหลด…</div>
+    </div>
+    <div class="month">
+      <button class="ibtn" id="prev" aria-label="เดือนก่อน"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <b id="month-label">—</b>
+      <button class="ibtn" id="next" aria-label="เดือนถัดไป"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      <button class="ibtn" id="reload" aria-label="โหลดใหม่"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
+    </div>
+  </header>
+
+  <div class="err" id="err" hidden></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="g2">
+    <div class="card">
+      <h2 id="today-title">วันนี้ <small id="today-date"></small></h2>
+      <div class="scroll" id="today"></div>
+    </div>
+    <div class="card">
+      <h2>ตำแหน่งที่เช็คอิน <small id="map-note"></small></h2>
+      <div id="map"></div>
+    </div>
+  </section>
+
+  <section class="g2b">
+    <div class="card">
+      <h2>จำนวนคนที่เช็คอินแต่ละวัน</h2>
+      <div class="bars" id="bars"></div>
+      <div class="axis" id="axis"></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>คนที่เช็คอิน</span><span><i style="background:var(--warn)"></i>วันนี้</span><span><i style="background:var(--surface-2)"></i>เสาร์-อาทิตย์</span></div>
+    </div>
+    <div class="card">
+      <h2>แยกตามภาค <small>คนที่เช็คอิน</small></h2>
+      <div class="reg" id="regions"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>สรุปรายคน <small id="people-note"></small></h2>
+    <div class="scroll" id="people"></div>
+    <div class="legend"><span><i style="background:var(--ok)"></i>เช็คอิน</span><span><i style="background:var(--bad)"></i>ลาป่วย</span><span><i style="background:var(--vac)"></i>ลาพักผ่อน</span><span><i style="border:1px dashed var(--line)"></i>เสาร์-อาทิตย์</span></div>
+  </section>
+
+  <section class="card">
+    <h2>การลาในเดือนนี้</h2>
+    <div class="scroll" id="leaves"></div>
+  </section>
+</div>
+
+<div class="wrap lock" id="lock" hidden>
+  <div class="card">
+    <h2 style="justify-content:center">แดชบอร์ดเช็คอิน</h2>
+    <div class="muted" id="lock-msg">เปิดจากลิงก์แดชบอร์ดที่ได้จากเมนู ระบบเช็คอิน → ลิงก์แดชบอร์ด ใน Google Sheet</div>
+    <input id="lock-input" placeholder="วางลิงก์แดชบอร์ดที่นี่" autocomplete="off">
+    <button class="btn" id="lock-go">เปิด</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbyBZqSHeAKm1SNr2AI0usVCBf2OPvkP1z7tJAFVA8DyJEfaHCONCBqU6NbXqysY2P61tA/exec';
+const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const TH_DOW = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* โหมดส่วนตัว */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* โหมดส่วนตัว */ } }
+};
+
+// รหัสอยู่หลัง # ของลิงก์ (ไม่ถูกส่งไปที่ GitHub) จำไว้ในเครื่องนี้ เปิดครั้งต่อไปไม่ต้องใช้ลิงก์เต็ม
+function keyFrom(text) { const m = String(text || '').match(/[#&]k=([A-Za-z0-9]+)/) || String(text || '').match(/^([A-Za-z0-9]{16,})$/); return m ? m[1] : ''; }
+let key = keyFrom(location.hash) || store.get('dash.key') || '';
+if (keyFrom(location.hash)) { store.set('dash.key', key); history.replaceState(null, '', location.pathname); }
+
+const now = new Date();
+let month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+let data = null, loading = false, map = null, layer = null, timer = null;
+
+const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const monthLabel = ym => { const [y, m] = ym.split('-').map(Number); return `${TH_MONTHS[m - 1]} ${y + 543}`; };
+const thDate = k => { const [y, m, d] = k.split('-').map(Number), dt = new Date(y, m - 1, d); return `วัน${TH_DOW[dt.getDay()]}ที่ ${d} ${TH_MONTHS[m - 1]} ${y + 543}`; };
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const fromMin = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(Math.round(n % 60)).padStart(2, '0')}`;
+const isWeekend = k => { const [y, m, d] = k.split('-').map(Number), w = new Date(y, m - 1, d).getDay(); return w === 0 || w === 6; };
+
+async function load() {
+  if (loading) return;
+  loading = true;
+  $('#reload').classList.add('spin');
+  $('#err').hidden = true;
+  try {
+    const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'dashboard', key, month }) });
+    const j = parseReply(await res.text());
+    if (!j.ok) {
+      if (j.badKey) { store.del('dash.key'); showLock(j.error); return; }
+      throw new Error(j.error || 'โหลดข้อมูลไม่สำเร็จ');
+    }
+    data = j;
+    $('#app').hidden = false; $('#lock').hidden = true;
+    render();
+    $('#updated').textContent = `อัปเดต ${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น. · ไม่นับรายการทดสอบ`;
+  } catch (e) {
+    $('#app').hidden = false;
+    $('#err').hidden = false;
+    $('#err').textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + e.message + ' (กดปุ่มโหลดใหม่)';
+  } finally {
+    loading = false;
+    $('#reload').classList.remove('spin');
+  }
+}
+
+function parseReply(txt) {
+  try { return JSON.parse(txt); } catch { /* ไม่ใช่ JSON ล้วน */ }
+  const doc = new DOMParser().parseFromString(txt, 'text/html');
+  doc.querySelectorAll('script,style').forEach(s => s.remove());
+  const m = (doc.body ? doc.body.textContent : '').match(/\{"ok"[\s\S]*\}/);
+  if (m) return JSON.parse(m[0]);
+  throw new Error('Google ตอบกลับผิดรูปแบบ');
+}
+
+function showLock(msg) {
+  $('#app').hidden = true; $('#lock').hidden = false;
+  if (msg) $('#lock-msg').textContent = msg + ' — ขอลิงก์ใหม่จากเมนู ระบบเช็คอิน → ลิงก์แดชบอร์ด';
+}
+
+// สรุปต่อคนต่อวัน: เข้า = เช็คอินแรก, ออก = เช็คเอาท์สุดท้าย, สถานที่ = รายการล่าสุด
+function summarize() {
+  const days = {}, people = {};
+  for (const r of data.records) {
+    const p = people[r.name] || (people[r.name] = { name: r.name, regions: {}, days: {} });
+    p.regions[r.region] = (p.regions[r.region] || 0) + 1;
+    const d = p.days[r.d] || (p.days[r.d] = { in: null, out: null, last: null });
+    if (r.out) { if (!d.out || r.t > d.out.t) d.out = r; }
+    else if (!d.in || r.t < d.in.t) d.in = r;
+    if (!d.last || r.t >= d.last.t) d.last = r;
+    (days[r.d] || (days[r.d] = new Set())).add(r.name);
+  }
+  const leaves = {};
+  for (const l of data.leaves) {
+    const p = people[l.name] || (people[l.name] = { name: l.name, regions: {}, days: {} });
+    (leaves[l.name] || (leaves[l.name] = {}))[l.d] = l.type;
+    p.leave = true;
+  }
+  for (const p of Object.values(people)) p.region = Object.keys(p.regions).sort((a, b) => p.regions[b] - p.regions[a])[0] || '—';
+  return { days, people, leaves };
+}
+
+function render() {
+  const S = summarize(), [y, m] = month.split('-').map(Number), nDays = new Date(y, m, 0).getDate();
+  const isCur = data.today.slice(0, 7) === month;
+  const keys = Array.from({ length: nDays }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
+  const people = Object.values(S.people).sort((a, b) => a.name.localeCompare(b.name, 'th'));
+  $('#month-label').textContent = monthLabel(month);
+  $('#next').disabled = month >= data.today.slice(0, 7);
+
+  // การ์ดตัวเลข
+  const firsts = [];
+  people.forEach(p => Object.values(p.days).forEach(d => d.in && firsts.push(toMin(d.in.t))));
+  const checkins = data.records.filter(r => !r.out).length;
+  const todayIn = isCur ? (S.days[data.today] || new Set()).size : null;
+  const leaveDays = data.leaves.length, sick = data.leaves.filter(l => l.type === 'ลาป่วย').length;
+  const kpi = (l, v, s) => `<div class="card kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s || '&nbsp;'}</div></div>`;
+  $('#kpis').innerHTML =
+    kpi('เช็คอินวันนี้', isCur ? `${todayIn}<small>คน</small>` : '—', isCur ? `จาก ${people.filter(p => Object.keys(p.days).length).length} คนที่เช็คอินเดือนนี้` : 'ดูได้เฉพาะเดือนปัจจุบัน') +
+    kpi('คนที่เช็คอินเดือนนี้', `${people.filter(p => Object.keys(p.days).length).length}<small>คน</small>`, `${Object.keys(S.days).length} วันที่มีคนเช็คอิน`) +
+    kpi('เช็คอินทั้งเดือน', `${checkins}<small>ครั้ง</small>`, `เช็คเอาท์ ${data.records.length - checkins} ครั้ง`) +
+    kpi('เวลาเข้างานเฉลี่ย', firsts.length ? fromMin(firsts.reduce((a, b) => a + b, 0) / firsts.length) : '—', 'เช็คอินแรกของแต่ละวัน') +
+    kpi('วันลาเดือนนี้', `${leaveDays}<small>วัน</small>`, leaveDays ? `ลาป่วย ${sick} · ลาพักผ่อน ${leaveDays - sick}` : 'ไม่มีการลา');
+
+  // วันนี้ (เดือนปัจจุบัน) หรือวันล่าสุดที่มีข้อมูล (เดือนก่อน)
+  const showDay = isCur ? data.today : (Object.keys(S.days).sort().pop() || null);
+  $('#today-title').firstChild.textContent = isCur ? 'วันนี้ ' : 'วันล่าสุดที่มีเช็คอิน ';
+  $('#today-date').textContent = showDay ? thDate(showDay) : '';
+  if (!showDay) $('#today').innerHTML = '<div class="empty">ไม่มีข้อมูลในเดือนนี้</div>';
+  else {
+    const rows = people.map(p => ({ p, d: p.days[showDay], lv: (S.leaves[p.name] || {})[showDay] }))
+      .filter(x => x.d || x.lv || isCur)
+      .sort((a, b) => (a.d?.in?.t || a.d?.last?.t || '99') < (b.d?.in?.t || b.d?.last?.t || '99') ? -1 : 1);
+    $('#today').innerHTML = rows.length ? `<table><thead><tr><th>ชื่อ</th><th>สถานะ</th><th class="c">เข้า</th><th class="c">ออก</th><th>สถานที่ล่าสุด</th><th class="c">รูป</th></tr></thead><tbody>${rows.map(({ p, d, lv }) => {
+      const st = lv ? `<span class="pill ${lv === 'ลาป่วย' ? 'p-sick' : 'p-vac'}">${esc(lv)}</span>`
+        : d ? `<span class="pill p-ok">${d.out ? 'เช็คเอาท์แล้ว' : 'เช็คอินแล้ว'}</span>` : '<span class="pill p-wait">ยังไม่เช็คอิน</span>';
+      const ph = d && (d.last.photo || d.in?.photo);
+      return `<tr><td class="name">${esc(p.name)}</td><td>${st}</td><td class="c num">${d?.in ? d.in.t : '–'}</td><td class="c num">${d?.out ? d.out.t : '–'}</td>` +
+        `<td><div class="site" title="${esc(d?.last.site)}">${esc(d?.last.site || '')}</div></td><td class="c">${ph ? `<a href="${esc(ph)}" target="_blank" rel="noopener">ดูรูป</a>` : ''}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="empty">ยังไม่มีใครเช็คอิน</div>';
+  }
+
+  // แผนที่: จุดเช็คอินของวันที่แสดง + จุดทำงาน
+  if (!map) {
+    map = L.map('map', { scrollWheelZoom: false }).setView([13.2, 101], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(map);
+  }
+  if (layer) layer.remove();
+  layer = L.layerGroup().addTo(map);
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0e5a52';
+  data.sites.forEach(s => L.circle([s.lat, s.lng], { radius: s.radius, color: accent, weight: 1, fillOpacity: .12 }).bindTooltip(s.name).addTo(layer));
+  const pts = [];
+  if (showDay) people.forEach(p => {
+    const d = p.days[showDay];
+    if (!d || d.last.lat == null) return;
+    pts.push([d.last.lat, d.last.lng]);
+    L.circleMarker([d.last.lat, d.last.lng], { radius: 8, color: '#fff', weight: 2, fillColor: d.out ? '#a15c00' : '#1d7a46', fillOpacity: 1 })
+      .bindPopup(`<b>${esc(p.name)}</b><br>${esc(d.last.site)}<br>เข้า ${d.in ? d.in.t : '–'} · ออก ${d.out ? d.out.t : '–'}`).addTo(layer);
+  });
+  $('#map-note').textContent = pts.length ? `${pts.length} คน · ${showDay === data.today ? 'วันนี้' : thDate(showDay)}` : 'ยังไม่มีตำแหน่ง';
+  if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(.4), { maxZoom: 13 });
+  else map.fitBounds(L.latLngBounds(data.sites.map(s => [s.lat, s.lng])).pad(.2));
+  setTimeout(() => map.invalidateSize(), 50);
+
+  // กราฟรายวัน
+  const max = Math.max(1, ...keys.map(k => (S.days[k] || new Set()).size));
+  $('#bars').innerHTML = keys.map(k => {
+    const n = (S.days[k] || new Set()).size;
+    return `<div class="bar${isWeekend(k) ? ' we' : ''}${k === data.today ? ' today' : ''}" title="${thDate(k)}: ${n} คน">${n ? `<b>${n}</b>` : ''}<i style="height:${n / max * 100}%"></i></div>`;
+  }).join('');
+  $('#axis').innerHTML = keys.map((k, i) => `<span>${(i + 1) % 5 === 0 || i === 0 ? i + 1 : ''}</span>`).join('');
+
+  // แยกตามภาค (นับคนที่เช็คอิน)
+  const byReg = {};
+  data.records.forEach(r => (byReg[r.region] || (byReg[r.region] = new Set())).add(r.name));
+  const regMax = Math.max(1, ...data.regions.map(r => (byReg[r] || new Set()).size));
+  $('#regions').innerHTML = data.regions.map(r => {
+    const n = (byReg[r] || new Set()).size;
+    return `<div class="reg-row"><div class="top2"><span>${esc(r)}</span><b class="num">${n}</b></div><div class="track"><i style="width:${n / regMax * 100}%"></i></div></div>`;
+  }).join('');
+
+  // ตารางรายคน + ปฏิทินจุด
+  $('#people-note').textContent = `${people.length} คน`;
+  $('#people').innerHTML = people.length ? `<table><thead><tr><th>ชื่อ</th><th>ภาค</th><th class="c">วันที่เช็คอิน</th><th class="c">เข้าเฉลี่ย</th><th class="c">ออกเฉลี่ย</th><th class="c">ลาป่วย</th><th class="c">ลาพักผ่อน</th><th>ทั้งเดือน</th></tr></thead><tbody>${people.map(p => {
+    const ds = Object.values(p.days), ins = ds.filter(d => d.in).map(d => toMin(d.in.t)), outs = ds.filter(d => d.out).map(d => toMin(d.out.t));
+    const avg = a => a.length ? fromMin(a.reduce((x, y) => x + y, 0) / a.length) : '–';
+    const lv = S.leaves[p.name] || {}, lvv = Object.values(lv);
+    const dots = keys.map(k => {
+      const cls = lv[k] ? (lv[k] === 'ลาป่วย' ? 'sick' : 'vac') : p.days[k] ? 'in' : isWeekend(k) ? 'we' : '';
+      return `<span class="dot ${cls}${k > data.today ? ' fut' : ''}" title="${thDate(k)}${lv[k] ? ' · ' + lv[k] : p.days[k] ? ' · เช็คอิน ' + (p.days[k].in?.t || p.days[k].last.t) : ''}"></span>`;
+    }).join('');
+    return `<tr><td class="name">${esc(p.name)}</td><td class="muted">${esc(p.region)}</td><td class="c num">${ds.length}</td><td class="c num">${avg(ins)}</td><td class="c num">${avg(outs)}</td>` +
+      `<td class="c num">${lvv.filter(t => t === 'ลาป่วย').length || '–'}</td><td class="c num">${lvv.filter(t => t !== 'ลาป่วย').length || '–'}</td><td><div class="dots">${dots}</div></td></tr>`;
+  }).join('')}</tbody></table>` : '<div class="empty">ไม่มีข้อมูลในเดือนนี้</div>';
+
+  // การลา
+  const lvs = data.leaves.slice().sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.name.localeCompare(b.name, 'th'));
+  $('#leaves').innerHTML = lvs.length ? `<table><thead><tr><th>วันที่</th><th>ชื่อ</th><th>ประเภท</th><th>หมายเหตุ</th></tr></thead><tbody>${lvs.map(l =>
+    `<tr><td>${thDate(l.d)}</td><td class="name">${esc(l.name)}</td><td><span class="pill ${l.type === 'ลาป่วย' ? 'p-sick' : 'p-vac'}">${esc(l.type)}</span></td><td class="muted">${esc(l.note)}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="empty">ไม่มีการลาในเดือนนี้</div>';
+}
+
+$('#prev').onclick = () => { month = ymAdd(month, -1); load(); };
+$('#next').onclick = () => { month = ymAdd(month, 1); load(); };
+$('#reload').onclick = () => load();
+$('#lock-go').onclick = () => {
+  const k = keyFrom($('#lock-input').value.trim());
+  if (!k) { $('#lock-msg').textContent = 'ลิงก์ไม่ถูกต้อง ต้องเป็นลิงก์ที่มี #k=… ต่อท้าย'; return; }
+  key = k; store.set('dash.key', k); load();
+};
+
+if (!key) showLock();
+else {
+  load();
+  // เดือนปัจจุบัน: โหลดใหม่ทุก 2 นาทีขณะเปิดหน้าไว้
+  timer = setInterval(() => { if (!document.hidden && data && data.today.slice(0, 7) === month) load(); }, 120000);
+}
+</script>
+</body>
+</html>
