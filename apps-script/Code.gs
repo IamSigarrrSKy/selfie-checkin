@@ -608,13 +608,15 @@ function buildSites(ss) {
 }
 
 /* ===================== แดชบอร์ด (หน้าเว็บแยก dashboard.html) =====================
- * หน้าแดชบอร์ดขอข้อมูลรายเดือนผ่าน doPost action "dashboard" (ไม่มีรหัส ใครมี URL ก็เปิดดูได้)
+ * หน้าแดชบอร์ดขอข้อมูลรายเดือนผ่าน doPost action "dashboard" ต้องส่งรหัสผ่านที่ตรงกับ DASH_PASSWORD
  * ดูลิงก์ได้จากเมนู ระบบเช็คอิน → ลิงก์แดชบอร์ด
  */
 const DASH_PAGE = 'https://iamsigarrrsky.github.io/selfie-checkin/dashboard.html';
+const DASH_PASSWORD = '';   // รหัสผ่านแดชบอร์ด ใส่ตอนวางโค้ดใน Apps Script (ไม่เก็บใน GitHub) เว้นว่าง = ไม่ต้องใช้รหัส
 
 // ข้อมูลเช็คอินและการลาของเดือนที่ขอ (ไม่รวมรายการทดสอบ) หน้าเว็บคำนวณสรุปเอง
 function dashboardData(req) {
+  if (DASH_PASSWORD && String(req.password || '') !== DASH_PASSWORD) return { ok: false, badPassword: true, error: 'รหัสผ่านไม่ถูกต้อง' };
   const tz = 'Asia/Bangkok', fmt = d => Utilities.formatDate(d, tz, 'yyyy-MM-dd');
   const ym = /^\d{4}-\d{2}$/.test(String(req.month || '')) ? req.month : Utilities.formatDate(new Date(), tz, 'yyyy-MM');
   const ss = book(), records = [], leaves = [];
@@ -655,7 +657,7 @@ function showDashboardLink() {
   const html = '<div style="font:14px sans-serif;line-height:1.7">' +
     '<a href="' + url + '" target="_blank">เปิดแดชบอร์ด</a><br>' +
     '<input value="' + url + '" style="width:100%;font:12px monospace" onclick="this.select()" readonly><br>' +
-    '<span style="color:#888">ใครมีลิงก์นี้ดูข้อมูลเช็คอินได้ทั้งหมด</span></div>';
+    '<span style="color:#888">เปิดลิงก์แล้วใส่รหัสผ่านแดชบอร์ด</span></div>';
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(520).setHeight(150), 'ลิงก์แดชบอร์ด');
 }
 

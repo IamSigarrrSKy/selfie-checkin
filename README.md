@@ -22,4 +22,4 @@
 
 `dashboard.html` แสดงสรุปรายเดือนจากข้อมูลใน Sheet: เช็คอินวันนี้ แผนที่ กราฟรายวัน แยกตามภาค สรุปรายคน และการลา
 
-https://iamsigarrrsky.github.io/selfie-checkin/dashboard.html (เปิดดูได้โดยไม่ต้องมีรหัส ใครมีลิงก์ก็ดูข้อมูลเช็คอินได้)
+https://iamsigarrrsky.github.io/selfie-checkin/dashboard.html ต้องใส่รหัสผ่าน (ตั้งใน `DASH_PASSWORD` ตอนวางโค้ดใน Apps Script ไม่ได้เก็บใน GitHub) เครื่องที่ใส่ถูกแล้วจะจำไว้

@@ -122,6 +122,12 @@ a{color:var(--accent)}
 .dot.vac{background:var(--vac)}
 .dot.fut{opacity:.35}
 
+.lock{max-width:400px;margin:14vh auto 0}
+.lock form{display:flex;flex-direction:column;gap:10px;padding:24px}
+.lock h2{font-size:20px;margin:0 0 4px}
+.lock input{width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:16px}
+.lock-msg{color:var(--bad);font-size:14px}
+.btn{padding:11px 18px;border-radius:12px;border:0;background:var(--accent);color:var(--accent-fg);font-weight:600}
 .err{background:var(--bad-soft);color:var(--bad);border-radius:12px;padding:10px 14px;font-size:14px}
 
 @media (max-width:980px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.g2,.g2b{grid-template-columns:minmax(0,1fr)}}
@@ -184,6 +190,16 @@ a{color:var(--accent)}
   </section>
 </div>
 
+<div class="wrap lock" id="lock" hidden>
+  <form class="card" id="lock-form">
+    <h2>แดชบอร์ดเช็คอิน</h2>
+    <label class="muted" for="lock-input">ใส่รหัสผ่านเพื่อดูข้อมูล</label>
+    <input id="lock-input" type="password" autocomplete="current-password">
+    <div class="lock-msg" id="lock-msg" hidden></div>
+    <button class="btn" type="submit">เข้าดู</button>
+  </form>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyBZqSHeAKm1SNr2AI0usVCBf2OPvkP1z7tJAFVA8DyJEfaHCONCBqU6NbXqysY2P61tA/exec';
@@ -191,9 +207,15 @@ const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มี
 const TH_DOW = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* โหมดส่วนตัว */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* โหมดส่วนตัว */ } }
+};
 const now = new Date();
 let month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 let data = null, loading = false, map = null, layer = null;
+let password = store.get('dash.pw') || '';   // จำรหัสผ่านไว้ในเครื่องนี้ เปิดครั้งต่อไปไม่ต้องใส่ใหม่
 
 const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const monthLabel = ym => { const [y, m] = ym.split('-').map(Number); return `${TH_MONTHS[m - 1]} ${y + 543}`; };
@@ -209,11 +231,15 @@ async function load() {
   $('#err').hidden = true;
   try {
     const j = await request();
+    if (j.badPassword) { store.del('dash.pw'); password = ''; showLock(data ? 'รหัสผ่านถูกเปลี่ยน ใส่รหัสผ่านใหม่' : 'รหัสผ่านไม่ถูกต้อง'); return; }
     if (!j.ok) throw new Error(j.error || 'โหลดข้อมูลไม่สำเร็จ');
+    store.set('dash.pw', password);
+    $('#lock').hidden = true; $('#app').hidden = false;
     data = j;
     render();
     $('#updated').textContent = `อัปเดต ${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น. · ไม่นับรายการทดสอบ`;
   } catch (e) {
+    if (!$('#lock').hidden) { $('#lock-msg').textContent = 'เชื่อมต่อไม่สำเร็จ: ' + e.message + ' ลองกดอีกครั้ง'; return; }
     $('#err').hidden = false;
     $('#err').textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + e.message + ' (กดปุ่มโหลดใหม่)';
   } finally {
@@ -227,7 +253,7 @@ async function request() {
   for (let i = 1; ; i++) {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
     try {
-      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'dashboard', month }), signal: ctl.signal });
+      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'dashboard', month, password }), signal: ctl.signal });
       return parseReply(await res.text());
     } catch (e) {
       if (i >= 3) throw e.name === 'AbortError' ? new Error('Google ตอบช้าเกินไป') : e;
@@ -372,8 +398,26 @@ function render() {
 $('#prev').onclick = () => { month = ymAdd(month, -1); load(); };
 $('#next').onclick = () => { month = ymAdd(month, 1); load(); };
 $('#reload').onclick = () => load();
+function showLock(msg) {
+  $('#app').hidden = true; $('#lock').hidden = false;
+  $('#lock-msg').textContent = msg || '';
+  $('#lock-msg').hidden = !msg;
+  $('#lock-input').value = '';
+  $('#lock-input').focus();
+}
+
+$('#lock-form').onsubmit = e => {
+  e.preventDefault();
+  const v = $('#lock-input').value;
+  if (!v) return;
+  password = v;
+  $('#lock-msg').hidden = false;
+  $('#lock-msg').textContent = 'กำลังตรวจรหัสผ่าน…';
+  load();
+};
+
 $('#month-label').textContent = monthLabel(month);
-load();
+if (password) load(); else showLock();
 // เดือนปัจจุบัน: โหลดใหม่ทุก 2 นาทีขณะเปิดหน้าไว้
 setInterval(() => { if (!document.hidden && data && data.today.slice(0, 7) === month) load(); }, 120000);
 </script>
