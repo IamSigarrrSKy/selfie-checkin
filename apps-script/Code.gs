@@ -667,7 +667,7 @@ function buildSignExcel(ss, name) {
     [SIGN_CFG, SIGN_NAMES, SIGN_HOLIDAYS].forEach(n => { const s = tmp.getSheetByName(n); if (s) tmp.deleteSheet(s); });
     SpreadsheetApp.flush();
     const xlsx = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + tmp.getId() + '/export?format=xlsx',
-      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob();
+      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob().setContentType('application/zip');
     const parts = Utilities.unzip(xlsx).map(fixExcelPart);
     const out = Utilities.zip(parts, name).setContentType(MimeType.MICROSOFT_EXCEL);
     const it = DriveApp.getFoldersByName(EXCEL_FOLDER);
@@ -714,7 +714,7 @@ function fixExcelPart(blob) {
 function debugSignExcel() {
   const ss = signBook();
   const xlsx = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx',
-    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob();
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob().setContentType('application/zip');
   Utilities.unzip(xlsx).forEach(b => {
     const s = b.getDataAsString('UTF-8');
     Logger.log(b.getName() + ' (' + s.length + ')');
