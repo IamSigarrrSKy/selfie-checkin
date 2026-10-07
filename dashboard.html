@@ -231,8 +231,7 @@ async function load() {
   $('#reload').classList.add('spin');
   $('#err').hidden = true;
   try {
-    const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'dashboard', key, month }) });
-    const j = parseReply(await res.text());
+    const j = await request();
     if (!j.ok) {
       if (j.badKey) { store.del('dash.key'); showLock(j.error); return; }
       throw new Error(j.error || 'โหลดข้อมูลไม่สำเร็จ');
@@ -248,6 +247,19 @@ async function load() {
   } finally {
     loading = false;
     $('#reload').classList.remove('spin');
+  }
+}
+
+// Apps Script ที่เพิ่งตื่นบางครั้งตอบเป็นหน้า HTML: ลองใหม่สูงสุด 3 ครั้ง
+async function request() {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'dashboard', key, month }) });
+      return parseReply(await res.text());
+    } catch (e) {
+      if (i >= 3) throw e;
+      await new Promise(r => setTimeout(r, 1500 * i));
+    }
   }
 }
 
@@ -398,6 +410,8 @@ $('#lock-go').onclick = () => {
 
 if (!key) showLock();
 else {
+  $('#app').hidden = false;
+  $('#month-label').textContent = monthLabel(month);
   load();
   // เดือนปัจจุบัน: โหลดใหม่ทุก 2 นาทีขณะเปิดหน้าไว้
   timer = setInterval(() => { if (!document.hidden && data && data.today.slice(0, 7) === month) load(); }, 120000);
