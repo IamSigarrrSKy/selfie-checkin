@@ -603,3 +603,281 @@ function buildSites(ss) {
   band(sh, sh.getRange(2, 1, rows.length, head.length));
   return sh;
 }
+
+/* ===================== ใบลงชื่อปฏิบัติงาน (ไฟล์แยก หนึ่งแท็บต่อหนึ่งคน ดาวน์โหลดเป็น Excel) ===================== */
+const SIGN_SHEET_ID = '';   // ID ของไฟล์ใบลงชื่อ (ไฟล์ Google Sheet อีกไฟล์)
+const SIGN_CFG = 'ตั้งค่า', SIGN_NAMES = 'รายชื่อ', SIGN_HOLIDAYS = 'วันหยุด', SIGN_TAG = 'ci.signsheet';
+const SIGN_FONT = 'TH SarabunIT๙';
+const TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม',
+  'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const TH_DAYS = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+// หัวกระดาษบรรทัดที่ 2 ของแต่ละภาค (แก้ได้ในแท็บตั้งค่าของไฟล์ใบลงชื่อ)
+const SIGN_CENTERS = [
+  ['ส่วนกลาง', 'สำนักงานปรมาณูเพื่อสันติ กรุงเทพมหานคร'],
+  ['ภาคเหนือ', 'ศูนย์ปรมาณูเพื่อสันติภูมิภาค ภาคเหนือ จังหวัดเชียงใหม่'],
+  ['ภาคตะวันออกเฉียงเหนือ', 'ศูนย์ปรมาณูเพื่อสันติภูมิภาค ภาคตะวันออกเฉียงเหนือ จังหวัดขอนแก่น'],
+  ['ภาคใต้', 'ศูนย์ปรมาณูเพื่อสันติภูมิภาค ภาคใต้ จังหวัดสงขลา'],
+  ['ภาคตะวันออก', 'ศูนย์ปรมาณูเพื่อสันติภูมิภาค ภาคตะวันออก จังหวัดระยอง'],
+  [OTHER_REGION, 'สำนักงานปรมาณูเพื่อสันติ']
+];
+const SIGN_SIGNER = ['ลงชื่อ.................................................', '(นางสาวธนวรรณ  แจ่มสุวรรณ)',
+  'ผชช.เฉพาะด้านพัฒนาระบบบริหารจัดการด้านพลังงานปรมาณู', 'ปฏิบัติหน้าที่ หปสภ.', '......./......../............'];
+// วันหยุดราชการที่วันที่ตายตัว วันหยุดทางพุทธศาสนาและวันหยุดชดเชยต้องเพิ่มเองในแท็บวันหยุด
+const SIGN_FIXED_HOLIDAYS = [['01-01', 'วันขึ้นปีใหม่'], ['04-06', 'วันจักรี'], ['04-13', 'วันสงกรานต์'], ['04-14', 'วันสงกรานต์'],
+  ['04-15', 'วันสงกรานต์'], ['05-04', 'วันฉัตรมงคล'], ['06-03', 'วันเฉลิมพระชนมพรรษาสมเด็จพระราชินี'],
+  ['07-28', 'วันเฉลิมพระชนมพรรษาพระบาทสมเด็จพระเจ้าอยู่หัว'], ['08-12', 'วันแม่แห่งชาติ'], ['10-13', 'วันนวมินทรมหาราช'],
+  ['10-23', 'วันปิยมหาราช'], ['12-05', 'วันพ่อแห่งชาติ'], ['12-10', 'วันรัฐธรรมนูญ'], ['12-31', 'วันสิ้นปี']];
+
+function signBook() {
+  if (!SIGN_SHEET_ID) throw new Error('ยังไม่ได้ใส่ SIGN_SHEET_ID');
+  return SpreadsheetApp.openById(SIGN_SHEET_ID);
+}
+
+function onSignOpen() {
+  SpreadsheetApp.getUi().createMenu('ใบลงชื่อ')
+    .addItem('สร้าง/อัปเดตใบลงชื่อ (เดือนในแท็บตั้งค่า)', 'makeSignSheets')
+    .addSeparator()
+    .addItem('ดาวน์โหลดเป็น Excel…', 'signExcelHelp')
+    .addToUi();
+}
+
+function signExcelHelp() {
+  SpreadsheetApp.getUi().alert('ดาวน์โหลดเป็น Excel',
+    'เมนู ไฟล์ → ดาวน์โหลด → Microsoft Excel (.xlsx)\nได้ไฟล์เดียว หนึ่งแท็บต่อหนึ่งคน ของเดือนที่สร้างไว้ล่าสุด',
+    SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/** กด Run หนึ่งครั้ง: สร้างแท็บตั้งค่า/รายชื่อ/วันหยุด ในไฟล์ใบลงชื่อ และติดตั้งเมนู (รันซ้ำได้ ค่าที่แก้ไว้ไม่หาย) */
+function setupSignSheet() {
+  const ss = signBook();
+  ss.setSpreadsheetLocale('th_TH');
+  ss.setSpreadsheetTimeZone('Asia/Bangkok');
+  if (ScriptApp.getProjectTriggers().every(t => t.getHandlerFunction() !== 'onSignOpen')) {
+    ScriptApp.newTrigger('onSignOpen').forSpreadsheet(ss).onOpen().create();
+  }
+
+  // ตั้งค่า: เดือน ปี หัวกระดาษแต่ละภาค ผู้ลงนาม
+  const cfg = sheet(ss, SIGN_CFG);
+  trimColumns(cfg, 3);
+  cfg.getRange('A1').setValue('ตั้งค่าใบลงชื่อ').setFontSize(16).setFontWeight('bold').setFontColor(C.title);
+  cfg.getRange('A3:A4').setValues([['เดือน'], ['ปี (พ.ศ.)']]).setFontWeight('bold');
+  const now = new Date();
+  if (!cfg.getRange('B3').getValue()) cfg.getRange('B3').setValue(TH_MONTHS[now.getMonth()]);
+  if (!cfg.getRange('B4').getValue()) cfg.getRange('B4').setValue(now.getFullYear() + 543);
+  cfg.getRange('B3').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(TH_MONTHS, true).build());
+  cfg.getRange('B4').setNumberFormat('0');
+  cfg.getRange('B3:B4').setBackground(C.warn).setFontWeight('bold').setHorizontalAlignment('left');
+  cfg.getRange('C3').setValue('← เลือกเดือนและปี แล้วกดเมนู ใบลงชื่อ → สร้าง/อัปเดตใบลงชื่อ').setFontColor(C.muted);
+
+  cfg.getRange('A6:B6').setValues([['ภาค', 'หัวกระดาษบรรทัดที่ 2 (ต่อท้ายด้วย "ประจำเดือน …" ให้อัตโนมัติ)']]);
+  styleHeader(cfg, 6, 2);
+  cfg.setFrozenRows(0);
+  const have = cfg.getRange(7, 1, SIGN_CENTERS.length, 2).getValues();
+  cfg.getRange(7, 1, SIGN_CENTERS.length, 2).setValues(SIGN_CENTERS.map((c, i) => [c[0], have[i][1] || c[1]]));
+
+  const sRow = 8 + SIGN_CENTERS.length;
+  cfg.getRange(sRow, 1, 1, 2).setValues([['บรรทัด', 'ผู้ลงนามรับรอง (ท้ายใบลงชื่อทุกคน)']]);
+  styleHeader(cfg, sRow, 2);
+  cfg.setFrozenRows(0);
+  const haveS = cfg.getRange(sRow + 1, 2, SIGN_SIGNER.length, 1).getValues();
+  cfg.getRange(sRow + 1, 1, SIGN_SIGNER.length, 2).setValues(SIGN_SIGNER.map((s, i) => [i + 1, haveS[i][0] || s]));
+  cfg.getRange(sRow + 1, 1, SIGN_SIGNER.length, 1).setHorizontalAlignment('center');
+  [150, 520, 420].forEach((w, i) => cfg.setColumnWidth(i + 1, w));
+  cfg.setTabColor(C.head);
+
+  // รายชื่อ: เพิ่มชื่อใหม่ให้อัตโนมัติ เอาเครื่องหมายออกถ้าไม่ต้องทำใบลงชื่อให้คนนั้น
+  const nm = sheet(ss, SIGN_NAMES);
+  trimColumns(nm, 3);
+  nm.getRange(1, 1, 1, 3).setValues([['ชื่อ-สกุล (ตรงกับที่พิมพ์ในแอป)', 'ภาค (ว่าง = ตามจุดที่เช็คอิน)', 'ทำใบลงชื่อ']]);
+  styleHeader(nm, 1, 3);
+  nm.getRange(2, 2, nm.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(SIGN_CENTERS.map(c => c[0]), true).setAllowInvalid(false).build());
+  nm.getRange(2, 3, nm.getMaxRows() - 1, 1).setHorizontalAlignment('center');
+  [280, 220, 110].forEach((w, i) => nm.setColumnWidth(i + 1, w));
+  nm.setTabColor(C.head);
+
+  // วันหยุดราชการ: ใส่วันที่ตายตัวของปีที่ตั้งไว้ให้ก่อน
+  const hd = sheet(ss, SIGN_HOLIDAYS);
+  trimColumns(hd, 4);
+  hd.getRange(1, 1, 1, 2).setValues([['วันที่', 'ชื่อวันหยุด']]);
+  styleHeader(hd, 1, 2);
+  if (hd.getLastRow() < 2) {
+    const y = Number(cfg.getRange('B4').getValue()) - 543;
+    hd.getRange(2, 1, SIGN_FIXED_HOLIDAYS.length, 2)
+      .setValues(SIGN_FIXED_HOLIDAYS.map(h => [dateSerial(y + '-' + h[0]), h[1]]));
+  }
+  hd.getRange(2, 1, hd.getMaxRows() - 1, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
+  [160, 360, 20, 340].forEach((w, i) => hd.setColumnWidth(i + 1, w));
+  hd.getRange('D1').setValue('เพิ่มวันหยุดทางพุทธศาสนา วันหยุดชดเชย และวันหยุดพิเศษตามประกาศ ครม. เอง ' +
+    '(พิมพ์วันที่แบบ 2026-03-03) ปีใหม่ให้เพิ่มแถวของปีนั้นต่อท้าย').setFontColor(C.muted).setWrap(true);
+  hd.setTabColor(C.head);
+
+  ss.getSheets().forEach(s => {   // ลบชีตว่างเริ่มต้น (Sheet1 / แผ่น1)
+    if ([SIGN_CFG, SIGN_NAMES, SIGN_HOLIDAYS].indexOf(s.getName()) < 0 && s.getLastRow() === 0 && !isSignTab(s)) ss.deleteSheet(s);
+  });
+  orderSignTabs(ss);
+}
+
+function isSignTab(s) {
+  return s.getDeveloperMetadata().some(m => m.getKey() === SIGN_TAG);
+}
+
+// แท็บใบลงชื่อเรียงตามชื่อ แท็บตั้งค่าไว้ท้ายสุด
+function orderSignTabs(ss) {
+  const people = ss.getSheets().filter(isSignTab).map(s => s.getName()).sort((a, b) => a.localeCompare(b, 'th'));
+  people.concat([SIGN_CFG, SIGN_NAMES, SIGN_HOLIDAYS]).forEach((name, i) => {
+    const s = ss.getSheetByName(name);
+    if (s) { ss.setActiveSheet(s); ss.moveActiveSheet(i + 1); }
+  });
+  ss.setActiveSheet(ss.getSheets()[0]);
+}
+
+function normName(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim();
+}
+
+/** สร้างใบลงชื่อของเดือนที่ตั้งไว้ คนละแท็บ (ดึงจากแท็บเช็คอินและการลาของไฟล์หลัก) */
+function makeSignSheets() {
+  const ss = signBook(), tz = 'Asia/Bangkok';
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { /* รันจากหน้าแก้สคริปต์ */ }
+  const say = msg => ui ? ui.alert(msg) : Logger.log(msg);
+  const cfg = ss.getSheetByName(SIGN_CFG);
+  if (!cfg) { say('ยังไม่ได้ตั้งค่า: รัน setupSignSheet ก่อน'); return; }
+  const month = TH_MONTHS.indexOf(String(cfg.getRange('B3').getValue()).trim()) + 1;
+  let yearBE = Number(cfg.getRange('B4').getValue());
+  if (yearBE && yearBE < 2400) yearBE += 543;
+  if (!month || !yearBE) { say('เลือกเดือนและปี (พ.ศ.) ในแท็บ "' + SIGN_CFG + '" ก่อน'); return; }
+  const year = yearBE - 543, days = new Date(year, month, 0).getDate();
+  const ym = year + '-' + ('0' + month).slice(-2);
+  const keyOf = d => Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+
+  const centers = {};
+  cfg.getRange(7, 1, SIGN_CENTERS.length, 2).getValues().forEach(r => { if (r[0]) centers[r[0]] = r[1]; });
+  const signer = cfg.getRange(9 + SIGN_CENTERS.length, 2, SIGN_SIGNER.length, 1).getValues().map(r => r[0]);
+
+  // เช็คอิน: เวลาเข้า = เช็คอินแรกของวัน, เวลาออก = เช็คเอาท์สุดท้ายของวัน (ไม่นับรายการทดสอบ)
+  const people = {};
+  const person = n => people[n] || (people[n] = { regions: {}, monthRegions: {}, days: {}, leaves: {} });
+  const log = book().getSheetByName(LOG);
+  if (log && log.getLastRow() > 1) {
+    const n = log.getLastRow() - 1;
+    const vals = log.getRange(2, 1, n, HEADERS.length).getValues();
+    const times = log.getRange(2, 3, n, 1).getDisplayValues();
+    vals.forEach((v, i) => {
+      const name = normName(v[4]);
+      if (!name || !(v[1] instanceof Date) || v[14] === 'ใช่') return;
+      const p = person(name), key = keyOf(v[1]), region = v[COL_REGION - 1] || regionOf(v[6]);
+      p.regions[region] = (p.regions[region] || 0) + 1;
+      if (key.slice(0, 7) !== ym) return;
+      const m = String(times[i][0]).match(/^(\d{1,2}):(\d{2})/);
+      if (!m) return;
+      p.monthRegions[region] = (p.monthRegions[region] || 0) + 1;
+      const t = ('0' + m[1]).slice(-2) + ':' + m[2], url = String(v[COL_PHOTO_URL - 1] || '');
+      const d = p.days[key] || (p.days[key] = {});
+      if (v[3] === 'เช็คเอาท์' || v[3] === 'ออกงาน') {
+        if (!d.out || t > d.out.t) d.out = { t: t, url: url };
+      } else if (!d.in || t < d.in.t) d.in = { t: t, url: url };
+    });
+  }
+  const lv = book().getSheetByName(LEAVE);
+  if (lv && lv.getLastRow() > 1) {
+    lv.getRange(2, 1, lv.getLastRow() - 1, LEAVE_HEADERS.length).getValues().forEach(v => {
+      const name = normName(v[3]);
+      if (!name || !(v[1] instanceof Date)) return;
+      const key = keyOf(v[1]);
+      if (key.slice(0, 7) === ym) person(name).leaves[key] = v[2];
+    });
+  }
+  const holidays = {};
+  const hd = ss.getSheetByName(SIGN_HOLIDAYS);
+  if (hd && hd.getLastRow() > 1) {
+    hd.getRange(2, 1, hd.getLastRow() - 1, 2).getValues().forEach(v => {
+      if (v[0] instanceof Date) holidays[keyOf(v[0])] = String(v[1] || 'วันหยุดราชการ');
+    });
+  }
+
+  // รายชื่อ: เพิ่มคนที่มีข้อมูลเดือนนี้แต่ยังไม่อยู่ในรายชื่อ
+  const nm = ss.getSheetByName(SIGN_NAMES);
+  const listed = {};
+  if (nm.getLastRow() > 1) {
+    nm.getRange(2, 1, nm.getLastRow() - 1, 3).getValues().forEach(r => { if (normName(r[0])) listed[normName(r[0])] = r; });
+  }
+  const fresh = Object.keys(people).filter(n => !listed[n] &&
+    (Object.keys(people[n].days).length || Object.keys(people[n].leaves).length)).sort((a, b) => a.localeCompare(b, 'th'));
+  if (fresh.length) {
+    nm.getRange(nm.getLastRow() + 1, 1, fresh.length, 3).setValues(fresh.map(n => [n, '', true]));
+    fresh.forEach(n => { listed[n] = [n, '', true]; });
+  }
+  if (nm.getLastRow() > 1) nm.getRange(2, 3, nm.getLastRow() - 1, 1).insertCheckboxes();
+
+  const names = Object.keys(listed).filter(n => listed[n][2] === true).sort((a, b) => a.localeCompare(b, 'th'));
+  const top = o => Object.keys(o).sort((a, b) => o[b] - o[a])[0];
+  const made = {};
+  names.forEach(name => {
+    const p = people[name] || { regions: {}, monthRegions: {}, days: {}, leaves: {} };
+    const region = listed[name][1] || top(p.monthRegions) || top(p.regions) || OTHER_REGION;
+    const head = (centers[region] || centers[OTHER_REGION] || '') + ' ประจำเดือน ' + TH_MONTHS[month - 1] + ' ' + yearBE;
+    made[writeSignTab(ss, name, head, year, month, days, p, holidays, signer).getName()] = true;
+  });
+
+  // ลบแท็บใบลงชื่อของคนที่เอาออกจากรายชื่อแล้ว
+  ss.getSheets().forEach(s => { if (!made[s.getName()] && isSignTab(s)) ss.deleteSheet(s); });
+  orderSignTabs(ss);
+  say('สร้างใบลงชื่อเดือน ' + TH_MONTHS[month - 1] + ' ' + yearBE + ' แล้ว ' + names.length + ' คน' +
+    (fresh.length ? '\nเพิ่มชื่อใหม่ในแท็บรายชื่อ: ' + fresh.join(', ') : '') +
+    '\n\nดาวน์โหลดเป็น Excel: ไฟล์ → ดาวน์โหลด → Microsoft Excel (.xlsx)');
+}
+
+// หนึ่งแท็บต่อหนึ่งคน หน้าตาเหมือนใบลงชื่อเดิม (ฟอนต์ TH SarabunIT๙ ตอนเปิดใน Excel)
+function writeSignTab(ss, name, head, year, month, days, p, holidays, signer) {
+  const tab = name.replace(/[\[\]*?\/\\:]/g, ' ').slice(0, 99);
+  let sh = ss.getSheetByName(tab);
+  if (!sh) {
+    sh = ss.insertSheet(tab);
+    sh.addDeveloperMetadata(SIGN_TAG);
+  }
+  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart();
+  sh.clear();
+  trimColumns(sh, 8);
+  const need = 4 + days + 1 + signer.length;
+  if (sh.getMaxRows() > need) sh.deleteRows(need + 1, sh.getMaxRows() - need);
+  if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());
+  sh.setHiddenGridlines(true);
+
+  sh.getRange(1, 1, need, 8).setFontFamily(SIGN_FONT).setFontSize(18).setVerticalAlignment('middle');
+  sh.setRowHeights(1, need, 31);
+  [116, 68, 116, 130, 108, 130, 112, 150].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+
+  sh.getRange('A1:H1').merge().setValue('ใบลงชื่อปฏิบัติงาน').setHorizontalAlignment('center');
+  sh.getRange('A2:H2').merge().setValue(head).setHorizontalAlignment('center');
+  sh.getRange('A4:H4').setValues([['วันที่', 'ชื่อ-สกุล', '', 'ลงชื่อเข้างาน', 'เวลาเข้างาน', 'ลงชื่อออกงาน', 'เวลาออกงาน', 'หมายเหตุ']])
+    .setHorizontalAlignment('center');
+
+  const mm = ('0' + month).slice(-2), rows = [], gray = [];
+  const link = (x, text) => x.url ? '=HYPERLINK("' + x.url + '","' + text + '")' : text;
+  for (let d = 1; d <= days; d++) {
+    const key = year + '-' + mm + '-' + ('0' + d).slice(-2);
+    const dow = new Date(year, month - 1, d).getDay(), day = p.days[key] || {};
+    const off = holidays[key] || (dow === 0 || dow === 6 ? TH_DAYS[dow] : '');
+    if (off) gray.push(d);
+    rows.push([d + '/' + mm + '/' + (year + 543), name, '',
+      day.in ? link(day.in, 'เช็คอินผ่านระบบ') : '', day.in ? timeSerial(day.in.t) : '',
+      day.out ? link(day.out, 'เช็คเอาท์ผ่านระบบ') : '', day.out ? timeSerial(day.out.t) : '',
+      p.leaves[key] || off]);
+  }
+  sh.getRange(5, 1, days, 1).setNumberFormat('@');   // วันที่แบบ พ.ศ. เป็นข้อความ แสดงเหมือนกันทั้ง Sheet และ Excel
+  sh.getRange(5, 1, days, 8).setValues(rows);
+  sh.getRange(5, 5, days, 1).setNumberFormat('HH:mm');
+  sh.getRange(5, 7, days, 1).setNumberFormat('HH:mm');
+  sh.getRange(4, 2, days + 1, 2).mergeAcross();
+  sh.getRange(5, 1, days, 7).setHorizontalAlignment('center');
+  sh.getRange(5, 8, days, 1).setHorizontalAlignment('left');
+  sh.getRange(5, 4, days, 1).setFontSize(16);
+  sh.getRange(5, 6, days, 1).setFontSize(16);
+  sh.getRange(4, 1, days + 1, 8).setBorder(true, true, true, true, true, true);
+  gray.forEach(d => sh.getRange(4 + d, 1, 1, 8).setBackground('#e8e8e8'));
+
+  signer.forEach((line, i) => sh.getRange(6 + days + i, 5, 1, 4).merge().setValue(line).setHorizontalAlignment('center'));
+  return sh;
+}
