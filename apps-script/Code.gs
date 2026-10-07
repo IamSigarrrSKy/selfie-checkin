@@ -607,7 +607,9 @@ function buildSites(ss) {
 /* ===================== ใบลงชื่อปฏิบัติงาน (ไฟล์แยก หนึ่งแท็บต่อหนึ่งคน ดาวน์โหลดเป็น Excel) ===================== */
 const SIGN_SHEET_ID = '';   // ID ของไฟล์ใบลงชื่อ (ไฟล์ Google Sheet อีกไฟล์)
 const SIGN_CFG = 'ตั้งค่า', SIGN_NAMES = 'รายชื่อ', SIGN_HOLIDAYS = 'วันหยุด', SIGN_TAG = 'ci.signsheet';
-const SIGN_FONT = 'TH SarabunIT๙';
+// Google Sheet ไม่มีฟอนต์ TH SarabunIT๙: บนจอใช้ Sarabun แล้วเปลี่ยนเป็น TH SarabunIT๙ ขนาด 18 ตอนส่งออกเป็น Excel
+const SIGN_FONT = 'Sarabun', SIGN_SIZE = 13, EXCEL_FONT = 'TH SarabunIT๙', EXCEL_SIZE = 18;
+const EXCEL_FOLDER = 'ใบลงชื่อ (Excel)';
 const TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม',
   'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 const TH_DAYS = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
@@ -637,14 +639,88 @@ function onSignOpen() {
   SpreadsheetApp.getUi().createMenu('ใบลงชื่อ')
     .addItem('สร้าง/อัปเดตใบลงชื่อ (เดือนในแท็บตั้งค่า)', 'makeSignSheets')
     .addSeparator()
-    .addItem('ดาวน์โหลดเป็น Excel…', 'signExcelHelp')
+    .addItem('ส่งออกเป็น Excel', 'exportSignExcel')
     .addToUi();
 }
 
-function signExcelHelp() {
-  SpreadsheetApp.getUi().alert('ดาวน์โหลดเป็น Excel',
-    'เมนู ไฟล์ → ดาวน์โหลด → Microsoft Excel (.xlsx)\nได้ไฟล์เดียว หนึ่งแท็บต่อหนึ่งคน ของเดือนที่สร้างไว้ล่าสุด',
-    SpreadsheetApp.getUi().ButtonSet.OK);
+/** ส่งออกแท็บใบลงชื่อทั้งหมดเป็นไฟล์ .xlsx ใน Drive (ฟอนต์ TH SarabunIT๙ กระดาษ A4) */
+function exportSignExcel() {
+  const ss = signBook(), ui = SpreadsheetApp.getUi();
+  const tabs = ss.getSheets().filter(isSignTab);
+  if (!tabs.length) { ui.alert('ยังไม่มีใบลงชื่อ: กดเมนู ใบลงชื่อ → สร้าง/อัปเดตใบลงชื่อ ก่อน'); return; }
+  const month = (String(tabs[0].getRange('A2').getValue()).match(/ประจำเดือน\s+(.+)$/) || [])[1] || '';
+  const name = 'ใบลงชื่อ ' + month + '.xlsx';
+  const file = buildSignExcel(ss, name);
+  const html = '<div style="font:14px sans-serif;line-height:1.7">' + name + '<br>' +
+    '<a href="https://drive.google.com/uc?export=download&id=' + file.getId() + '" target="_blank">ดาวน์โหลดไฟล์ Excel</a>' +
+    ' · <a href="' + file.getUrl() + '" target="_blank">เปิดใน Drive</a><br>' +
+    '<span style="color:#888">เก็บไว้ในโฟลเดอร์ "' + EXCEL_FOLDER + '" ใน Google Drive</span></div>';
+  ui.showModalDialog(HtmlService.createHtmlOutput(html).setWidth(420).setHeight(130), 'ส่งออกเป็น Excel แล้ว');
+}
+
+function buildSignExcel(ss, name) {
+  SpreadsheetApp.flush();
+  // คัดลอกไฟล์ชั่วคราว ตัดแท็บตั้งค่าออก แล้วให้ Google แปลงเป็น .xlsx
+  const tmp = ss.copy('ส่งออกชั่วคราว ' + name);
+  const tmpFile = DriveApp.getFileById(tmp.getId());
+  try {
+    [SIGN_CFG, SIGN_NAMES, SIGN_HOLIDAYS].forEach(n => { const s = tmp.getSheetByName(n); if (s) tmp.deleteSheet(s); });
+    SpreadsheetApp.flush();
+    const xlsx = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + tmp.getId() + '/export?format=xlsx',
+      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob();
+    const parts = Utilities.unzip(xlsx).map(fixExcelPart);
+    const out = Utilities.zip(parts, name).setContentType(MimeType.MICROSOFT_EXCEL);
+    const it = DriveApp.getFoldersByName(EXCEL_FOLDER);
+    const folder = it.hasNext() ? it.next() : DriveApp.createFolder(EXCEL_FOLDER);
+    const old = folder.getFilesByName(name);   // ส่งออกเดือนเดิมซ้ำ: แทนไฟล์เก่า
+    while (old.hasNext()) old.next().setTrashed(true);
+    return folder.createFile(out);
+  } finally {
+    tmpFile.setTrashed(true);
+  }
+}
+
+// แก้ไฟล์ภายใน .xlsx: ฟอนต์ Sarabun → TH SarabunIT๙ (ขยายขนาดตามสัดส่วน) และตั้งหน้ากระดาษ A4 แนวตั้ง พอดีความกว้าง
+function fixExcelPart(blob) {
+  const path = blob.getName();
+  const isSheet = /^xl\/worksheets\/sheet\d+\.xml$/.test(path);
+  if (path !== 'xl/styles.xml' && !isSheet) return blob;
+  let xml = blob.getDataAsString('UTF-8');
+  if (path === 'xl/styles.xml') {
+    xml = xml.replace(/<font>([\s\S]*?)<\/font>/g, (all, inner) => {
+      if (inner.indexOf('"' + SIGN_FONT + '"') < 0) return all;
+      return '<font>' + inner.replace('"' + SIGN_FONT + '"', '"' + EXCEL_FONT + '"')
+        .replace(/<sz val="([\d.]+)"\s*\/>/, (m, s) => '<sz val="' + Math.round(+s * EXCEL_SIZE / SIGN_SIZE) + '"/>') + '</font>';
+    });
+  } else {
+    // ลำดับแท็กใน worksheet ต้องถูกตามมาตรฐาน ไม่งั้น Excel จะขึ้นว่าไฟล์เสีย
+    const setup = '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>';
+    xml = xml.replace(/<pageSetup[^>]*\/>/g, '');
+    if (/<pageMargins[^>]*\/>/.test(xml)) xml = xml.replace(/(<pageMargins[^>]*\/>)/, '$1' + setup);
+    else {
+      const at = ['<headerFooter', '<rowBreaks', '<colBreaks', '<drawing', '<legacyDrawing', '<tableParts', '<extLst', '</worksheet>']
+        .map(t => xml.indexOf(t)).filter(i => i >= 0).sort((a, b) => a - b)[0];
+      xml = xml.slice(0, at) + '<pageMargins left="0.6" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' + setup + xml.slice(at);
+    }
+    xml = xml.replace(/<pageSetUpPr[^>]*\/>/g, '');
+    xml = /<sheetPr[^>]*\/>/.test(xml) ? xml.replace(/<sheetPr([^>]*)\/>/, '<sheetPr$1><pageSetUpPr fitToPage="1"/></sheetPr>')
+      : xml.indexOf('</sheetPr>') >= 0 ? xml.replace('</sheetPr>', '<pageSetUpPr fitToPage="1"/></sheetPr>')
+      : xml.replace(/(<worksheet[^>]*>)/, '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+  }
+  return Utilities.newBlob(xml, 'application/xml', path);
+}
+
+// ใช้ตรวจโครงสร้างไฟล์ที่ Google แปลงออกมา (ดูผลใน Execution log)
+function debugSignExcel() {
+  const ss = signBook();
+  const xlsx = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx',
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob();
+  Utilities.unzip(xlsx).forEach(b => {
+    const s = b.getDataAsString('UTF-8');
+    Logger.log(b.getName() + ' (' + s.length + ')');
+    if (b.getName() === 'xl/styles.xml') Logger.log((s.match(/<fonts[\s\S]*?<\/fonts>/) || [''])[0].slice(0, 1500));
+    if (b.getName() === 'xl/worksheets/sheet1.xml') Logger.log(s.slice(0, 600) + ' … ' + s.slice(-900));
+  });
 }
 
 /** กด Run หนึ่งครั้ง: สร้างแท็บตั้งค่า/รายชื่อ/วันหยุด ในไฟล์ใบลงชื่อ และติดตั้งเมนู (รันซ้ำได้ ค่าที่แก้ไว้ไม่หาย) */
@@ -826,7 +902,7 @@ function makeSignSheets() {
   orderSignTabs(ss);
   say('สร้างใบลงชื่อเดือน ' + TH_MONTHS[month - 1] + ' ' + yearBE + ' แล้ว ' + names.length + ' คน' +
     (fresh.length ? '\nเพิ่มชื่อใหม่ในแท็บรายชื่อ: ' + fresh.join(', ') : '') +
-    '\n\nดาวน์โหลดเป็น Excel: ไฟล์ → ดาวน์โหลด → Microsoft Excel (.xlsx)');
+    '\n\nได้ไฟล์ Excel: เมนู ใบลงชื่อ → ส่งออกเป็น Excel');
 }
 
 // หนึ่งแท็บต่อหนึ่งคน หน้าตาเหมือนใบลงชื่อเดิม (ฟอนต์ TH SarabunIT๙ ตอนเปิดใน Excel)
@@ -845,7 +921,7 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer) {
   if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());
   sh.setHiddenGridlines(true);
 
-  sh.getRange(1, 1, need, 8).setFontFamily(SIGN_FONT).setFontSize(18).setVerticalAlignment('middle');
+  sh.getRange(1, 1, need, 8).setFontFamily(SIGN_FONT).setFontSize(SIGN_SIZE).setVerticalAlignment('middle');
   sh.setRowHeights(1, need, 31);
   [116, 68, 116, 130, 108, 130, 112, 150].forEach((w, i) => sh.setColumnWidth(i + 1, w));
 
@@ -873,8 +949,8 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer) {
   sh.getRange(4, 2, days + 1, 2).mergeAcross();
   sh.getRange(5, 1, days, 7).setHorizontalAlignment('center');
   sh.getRange(5, 8, days, 1).setHorizontalAlignment('left');
-  sh.getRange(5, 4, days, 1).setFontSize(16);
-  sh.getRange(5, 6, days, 1).setFontSize(16);
+  sh.getRange(5, 4, days, 1).setFontSize(SIGN_SIZE - 1);
+  sh.getRange(5, 6, days, 1).setFontSize(SIGN_SIZE - 1);
   sh.getRange(4, 1, days + 1, 8).setBorder(true, true, true, true, true, true);
   gray.forEach(d => sh.getRange(4 + d, 1, 1, 8).setBackground('#e8e8e8'));
 
