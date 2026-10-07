@@ -156,7 +156,6 @@ function onOpen() {
     .addItem('เก็บกวาดแถวที่ลบไม่หมด', 'cleanupBlankRows')
     .addSeparator()
     .addItem('ลิงก์แดชบอร์ด…', 'showDashboardLink')
-    .addItem('เปลี่ยนรหัสลิงก์แดชบอร์ด…', 'resetDashboardKey')
     .addToUi();
 }
 
@@ -609,21 +608,13 @@ function buildSites(ss) {
 }
 
 /* ===================== แดชบอร์ด (หน้าเว็บแยก dashboard.html) =====================
- * หน้าแดชบอร์ดขอข้อมูลรายเดือนผ่าน doPost action "dashboard" ต้องแนบรหัสที่เก็บใน Script Properties
+ * หน้าแดชบอร์ดขอข้อมูลรายเดือนผ่าน doPost action "dashboard" (ไม่มีรหัส ใครมี URL ก็เปิดดูได้)
  * ดูลิงก์ได้จากเมนู ระบบเช็คอิน → ลิงก์แดชบอร์ด
  */
 const DASH_PAGE = 'https://iamsigarrrsky.github.io/selfie-checkin/dashboard.html';
 
-function dashKey() {
-  const p = PropertiesService.getScriptProperties();
-  let k = p.getProperty('DASH_KEY');
-  if (!k) { k = Utilities.getUuid().replace(/-/g, '').slice(0, 24); p.setProperty('DASH_KEY', k); }
-  return k;
-}
-
 // ข้อมูลเช็คอินและการลาของเดือนที่ขอ (ไม่รวมรายการทดสอบ) หน้าเว็บคำนวณสรุปเอง
 function dashboardData(req) {
-  if (!req.key || req.key !== dashKey()) return { ok: false, badKey: true, error: 'ลิงก์แดชบอร์ดไม่ถูกต้องหรือถูกเปลี่ยนรหัสแล้ว' };
   const tz = 'Asia/Bangkok', fmt = d => Utilities.formatDate(d, tz, 'yyyy-MM-dd');
   const ym = /^\d{4}-\d{2}$/.test(String(req.month || '')) ? req.month : Utilities.formatDate(new Date(), tz, 'yyyy-MM');
   const ss = book(), records = [], leaves = [];
@@ -660,21 +651,14 @@ function dashboardData(req) {
 }
 
 function showDashboardLink() {
-  const url = DASH_PAGE + '#k=' + dashKey();
+  const url = DASH_PAGE;
   const html = '<div style="font:14px sans-serif;line-height:1.7">' +
     '<a href="' + url + '" target="_blank">เปิดแดชบอร์ด</a><br>' +
     '<input value="' + url + '" style="width:100%;font:12px monospace" onclick="this.select()" readonly><br>' +
-    '<span style="color:#888">ใครมีลิงก์นี้ดูข้อมูลเช็คอินได้ทั้งหมด ถ้าลิงก์หลุด ใช้เมนู "เปลี่ยนรหัสลิงก์แดชบอร์ด"</span></div>';
+    '<span style="color:#888">ใครมีลิงก์นี้ดูข้อมูลเช็คอินได้ทั้งหมด</span></div>';
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(520).setHeight(150), 'ลิงก์แดชบอร์ด');
 }
 
-function resetDashboardKey() {
-  const ui = SpreadsheetApp.getUi();
-  if (ui.alert('เปลี่ยนรหัสลิงก์แดชบอร์ด', 'ลิงก์เดิมจะใช้ไม่ได้อีก ต้องส่งลิงก์ใหม่ให้คนที่ใช้อยู่ เปลี่ยนเลยไหม?',
-    ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
-  PropertiesService.getScriptProperties().deleteProperty('DASH_KEY');
-  showDashboardLink();
-}
 
 /* ===================== ใบลงชื่อปฏิบัติงาน (ไฟล์แยก หนึ่งแท็บต่อหนึ่งคน ดาวน์โหลดเป็น Excel) ===================== */
 const SIGN_SHEET_ID = '';   // ID ของไฟล์ใบลงชื่อ (ไฟล์ Google Sheet อีกไฟล์)
