@@ -153,6 +153,9 @@ function onOpen() {
     .addItem('ลบข้อมูลทั้งเดือน…', 'deleteMonth')
     .addSeparator()
     .addItem('เก็บกวาดแถวที่ลบไม่หมด', 'cleanupBlankRows')
+    .addSeparator()
+    .addItem('สร้าง/รีเฟรชแดชบอร์ด (ทดลอง)', 'buildDashboard')
+    .addItem('ลบแดชบอร์ด', 'removeDashboard')
     .addToUi();
 }
 
@@ -602,6 +605,113 @@ function buildSites(ss) {
     .setFontColor(C.muted).setFontStyle('italic');
   band(sh, sh.getRange(2, 1, rows.length, head.length));
   return sh;
+}
+
+/* ===================== แดชบอร์ด (ทดลอง) =====================
+ * แท็บ "แดชบอร์ด" สร้างจากเมนู ระบบเช็คอิน → สร้าง/รีเฟรชแดชบอร์ด ไม่ได้อยู่ใน setup()
+ * เลิกใช้: เมนู ลบแดชบอร์ด หรือลบแท็บทิ้งได้เลย จะลบโค้ดก็ลบทั้งบล็อกนี้กับ 2 บรรทัดในเมนู onOpen
+ */
+const DASH = 'แดชบอร์ด';
+
+function buildDashboard() {
+  const ss = book();
+  let sh = ss.getSheetByName(DASH);
+  if (sh) ss.deleteSheet(sh);
+  sh = ss.insertSheet(DASH, 0);
+  trimColumns(sh, 17);
+  sh.setHiddenGridlines(true);
+  sh.setTabColor('#c0392b');
+  const L = "'" + LOG + "'!", V = "'" + LEAVE + "'!";
+  const m = '$N$2', e = 'EOMONTH($N$2,0)';
+  const real = L + 'O2:O,"<>ใช่"';
+  const inMonth = L + 'B2:B,">="&' + m + ',' + L + 'B2:B,"<="&' + e;
+  const notOut = L + 'D2:D,"<>เช็คเอาท์",' + L + 'D2:D,"<>ออกงาน"';
+
+  sh.getRange('A1').setValue('แดชบอร์ด (ทดลอง)').setFontSize(18).setFontWeight('bold').setFontColor(C.title);
+  sh.getRange('A2').setValue('คำนวณสดจากแท็บเช็คอินและการลา ไม่นับรายการทดสอบ · ลบได้จากเมนู ระบบเช็คอิน → ลบแดชบอร์ด')
+    .setFontColor(C.muted);
+  sh.getRange('A3').setValue('เดือน').setFontWeight('bold');
+  sh.getRange('B3').setNumberFormat('mmmm yyyy').setBackground(C.warn).setFontWeight('bold')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireDate().build());
+  sh.getRange('C3').setValue('← ว่าง = เดือนปัจจุบัน หรือพิมพ์วันที่ในเดือนที่ต้องการ เช่น 1/9/2026').setFontColor(C.muted);
+
+  // ข้อมูลสำหรับกราฟ (คอลัมน์ M เป็นต้นไป)
+  sh.getRange('M1').setValue('ข้อมูลสำหรับกราฟ (คำนวณเอง)').setFontColor(C.muted).setFontStyle('italic');
+  sh.getRange('M2').setValue('เดือนที่แสดง');
+  sh.getRange('N2').setFormula('=IF(B3="",EOMONTH(TODAY(),-1)+1,EOMONTH(B3,-1)+1)').setNumberFormat('mmmm yyyy');
+  sh.getRange('M4:N4').setValues([['วันที่', 'คนที่เช็คอิน']]);
+  sh.getRange('M5').setFormula('=SEQUENCE(DAY(' + e + '),1,' + m + ')');
+  sh.getRange('M5:M35').setNumberFormat('d');
+  sh.getRange('N5').setFormula('=MAP(M5:M35,LAMBDA(d,IF(d="",,COUNTUNIQUEIFS(' + L + 'E2:E,' + L + 'B2:B,d,' + real + '))))');
+  const regions = REGIONS.map(r => r.name).concat([OTHER_REGION]);
+  sh.getRange('P4:Q4').setValues([['ภาค', 'เช็คอิน (ครั้ง)']]);
+  sh.getRange(5, 16, regions.length, 1).setValues(regions.map(r => [r]));
+  sh.getRange(5, 17, regions.length, 1).setFormulas(regions.map((r, i) =>
+    ['=COUNTIFS(' + L + 'S2:S,P' + (5 + i) + ',' + inMonth + ',' + notOut + ',' + real + ')']));
+  sh.getRange('M4:Q4').setFontWeight('bold');
+
+  // การ์ดตัวเลข
+  const cards = [
+    ['เช็คอินวันนี้ (คน)', '=COUNTUNIQUEIFS(' + L + 'E2:E,' + L + 'B2:B,TODAY(),' + real + ')', '0'],
+    ['คนที่เช็คอินเดือนนี้', '=COUNTUNIQUEIFS(' + L + 'E2:E,' + inMonth + ',' + real + ')', '0'],
+    ['เช็คอินทั้งเดือน (ครั้ง)', '=COUNTIFS(' + inMonth + ',' + notOut + ',' + real + ')', '0'],
+    ['เวลาเช็คอินเฉลี่ย', '=IFERROR(AVERAGEIFS(' + L + 'C2:C,' + inMonth + ',' + notOut + ',' + real + '),"-")', 'HH:mm'],
+    ['วันลาเดือนนี้', '=COUNTIFS(' + V + 'B2:B,">="&' + m + ',' + V + 'B2:B,"<="&' + e + ')', '0 "วัน"']
+  ];
+  cards.forEach((c, i) => {
+    const col = 1 + i * 2;
+    sh.getRange(5, col, 1, 2).merge().setValue(c[0]).setFontColor(C.muted).setBackground(C.band).setHorizontalAlignment('center');
+    sh.getRange(6, col, 1, 2).merge().setFormula(c[1]).setNumberFormat(c[2]).setFontSize(24).setFontWeight('bold')
+      .setFontColor(C.head).setBackground(C.band).setHorizontalAlignment('center');
+    sh.getRange(5, col, 2, 2).setBorder(true, true, true, true, null, null, '#ffffff', SpreadsheetApp.BorderStyle.SOLID_THICK);
+  });
+  sh.setRowHeight(6, 48);
+
+  // ตารางรายคน (เดือนที่เลือก) และวันนี้ใครเช็คอินแล้ว
+  sh.getRange('A27').setValue('สรุปรายคน (เดือนที่เลือก)').setFontWeight('bold').setFontSize(13);
+  sh.getRange('G27').setValue('วันนี้ใครเช็คอินแล้ว').setFontWeight('bold').setFontSize(13);
+  sh.getRange('A28:D28').setValues([['ชื่อ', 'วันที่มาทำงาน', 'เช็คอินเฉลี่ย', 'วันลา']]);
+  sh.getRange('G28:J28').setValues([['ชื่อ', 'เข้างาน', 'ออกงาน', 'สถานที่ล่าสุด']]);
+  [sh.getRange('A28:D28'), sh.getRange('G28:J28')].forEach(r =>
+    r.setBackground(C.head).setFontColor(C.headFg).setFontWeight('bold').setHorizontalAlignment('center'));
+  sh.getRange('A29').setFormula('=IFERROR(SORT(UNIQUE(FILTER(' + L + 'E2:E,' + L + 'B2:B>=' + m + ',' + L + 'B2:B<=' + e + ',' +
+    L + 'E2:E<>"",' + L + 'O2:O<>"ใช่"))),"ไม่มีข้อมูล")');
+  const each = (col, body) => '=MAP(' + col + '29:' + col + ',LAMBDA(x,IF(OR(x="",x="ไม่มีข้อมูล",x="ยังไม่มีใครเช็คอิน"),,' + body + ')))';
+  sh.getRange('B29').setFormula(each('A', 'COUNTUNIQUEIFS(' + L + 'B2:B,' + L + 'E2:E,x,' + inMonth + ',' + real + ')'));
+  sh.getRange('C29').setFormula(each('A', 'IFERROR(AVERAGEIFS(' + L + 'C2:C,' + L + 'E2:E,x,' + inMonth + ',' + notOut + ',' + real + '),)'));
+  sh.getRange('D29').setFormula(each('A', 'COUNTIFS(' + V + 'D2:D,x,' + V + 'B2:B,">="&' + m + ',' + V + 'B2:B,"<="&' + e + ')'));
+  sh.getRange('G29').setFormula('=IFERROR(SORT(UNIQUE(FILTER(' + L + 'E2:E,' + L + 'B2:B=TODAY(),' + L + 'E2:E<>"",' +
+    L + 'O2:O<>"ใช่"))),"ยังไม่มีใครเช็คอิน")');
+  const today = L + 'E2:E,x,' + L + 'B2:B,TODAY(),' + real;
+  sh.getRange('H29').setFormula(each('G', 'LET(v,MINIFS(' + L + 'C2:C,' + today + ',' + notOut + '),IF(v=0,,v))'));
+  sh.getRange('I29').setFormula(each('G', 'LET(v,MAX(MAXIFS(' + L + 'C2:C,' + today + ',' + L + 'D2:D,"เช็คเอาท์"),MAXIFS(' +
+    L + 'C2:C,' + today + ',' + L + 'D2:D,"ออกงาน")),IF(v=0,,v))'));
+  sh.getRange('J29').setFormula(each('G', 'IFERROR(INDEX(SORT(FILTER({' + L + 'C2:C,' + L + 'G2:G},' + L + 'E2:E=x,' +
+    L + 'B2:B=TODAY(),' + L + 'O2:O<>"ใช่"),1,FALSE),1,2),)'));
+  const rows = sh.getMaxRows() - 28;
+  sh.getRange(29, 2, rows, 1).setNumberFormat('0 "วัน"').setHorizontalAlignment('center');
+  sh.getRange(29, 3, rows, 1).setNumberFormat('HH:mm').setHorizontalAlignment('center');
+  sh.getRange(29, 4, rows, 1).setNumberFormat('0 "วัน"').setHorizontalAlignment('center');
+  sh.getRange(29, 8, rows, 2).setNumberFormat('HH:mm').setHorizontalAlignment('center');
+  [170, 100, 100, 100, 100, 100, 170, 90, 90, 240, 100, 30, 90, 110, 20, 170, 110].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+
+  // กราฟ
+  sh.insertChart(sh.newChart().setChartType(Charts.ChartType.COLUMN).addRange(sh.getRange('M4:N35')).setNumHeaders(1)
+    .setPosition(8, 1, 0, 0).setOption('title', 'จำนวนคนที่เช็คอินแต่ละวัน').setOption('legend', { position: 'none' })
+    .setOption('colors', [C.head]).setOption('width', 640).setOption('height', 340).setOption('hAxis', { format: 'd' })
+    .setOption('vAxis', { format: '0', minValue: 0 }).build());
+  sh.insertChart(sh.newChart().setChartType(Charts.ChartType.PIE).addRange(sh.getRange(4, 16, regions.length + 1, 2))
+    .setNumHeaders(1).setPosition(8, 7, 0, 0).setOption('title', 'เช็คอินแยกตามภาค (เดือนที่เลือก)').setOption('pieHole', 0.45)
+    .setOption('colors', ['#0e5a52', '#2e7d5b', '#b8862b', '#2a6cb0', '#8a4fb0', '#8a9a96'])
+    .setOption('width', 520).setOption('height', 340).build());
+
+  ss.setActiveSheet(sh);
+}
+
+function removeDashboard() {
+  const ss = book(), sh = ss.getSheetByName(DASH);
+  if (sh) ss.deleteSheet(sh);
+  try { SpreadsheetApp.getUi().alert(sh ? 'ลบแท็บแดชบอร์ดแล้ว' : 'ไม่มีแท็บแดชบอร์ด'); } catch (e) { /* รันจากหน้าแก้สคริปต์ */ }
 }
 
 /* ===================== ใบลงชื่อปฏิบัติงาน (ไฟล์แยก หนึ่งแท็บต่อหนึ่งคน ดาวน์โหลดเป็น Excel) ===================== */
