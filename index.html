@@ -464,7 +464,8 @@ const DEFAULT_SITES = [
   { id: 'cmu', name: 'อุทยานวิทยาศาสตร์และเทคโนโลยี ม.เชียงใหม่', lat: 18.76467, lng: 98.93700, radius: 300 },
   { id: 'kku', name: 'อุทยานวิทยาศาสตร์ ม.ขอนแก่น', lat: 16.45588, lng: 102.81942, radius: 300 },
   { id: 'psu', name: 'อุทยานวิทยาศาสตร์ ม.สงขลานครินทร์', lat: 7.02194, lng: 100.55542, radius: 300 },
-  { id: 'oap', name: 'ปส. ภาคตะวันออก (ศาลากลาง จ.ระยอง)', lat: 12.70726, lng: 101.18380, radius: 300 }
+  { id: 'oap', name: 'ปส. ภาคตะวันออก (ศาลากลาง จ.ระยอง)', lat: 12.70726, lng: 101.18380, radius: 300 },
+  { id: 'oap-bkk', name: 'สำนักงานปรมาณูเพื่อสันติ (ส่วนกลาง กรุงเทพฯ)', lat: 13.85435, lng: 100.56617, radius: 300 }
 ];
 
 // ใส่ URL ของ Apps Script ไว้ตรงนี้ได้เลย หรือกรอกในหน้าตั้งค่าของแอป
@@ -472,6 +473,15 @@ const SHEET_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyBZqSHeAKm1S
 
 const canStore = (() => { try { localStorage.setItem('ci._t', '1'); localStorage.removeItem('ci._t'); return true; } catch { return false; } })();
 let sites    = store.get('ci.sites.v2', DEFAULT_SITES);
+// จุดทำงานใหม่ที่เพิ่มในค่าเริ่มต้นภายหลัง: เติมให้เครื่องที่เคยเปิดแอปแล้ว (จุดที่เครื่องนั้นลบเองจะไม่กลับมา)
+(() => {
+  const seen = store.get('ci.sites.seen', ['cmu', 'kku', 'psu', 'oap']);
+  const fresh = DEFAULT_SITES.filter(s => seen.indexOf(s.id) < 0);
+  if (!fresh.length) return;
+  fresh.forEach(s => { if (!sites.some(x => x.id === s.id)) sites.push({ ...s }); });
+  store.set('ci.sites.v2', sites);
+  store.set('ci.sites.seen', seen.concat(fresh.map(s => s.id)));
+})();
 let records  = store.get('ci.records', []);
 let profile  = store.get('ci.profile', { name: '', dept: '' });
 let settings = Object.assign({ demo: false, allowOut: true, scriptUrl: SHEET_URL_DEFAULT, token: '' }, store.get('ci.settings', {}));
