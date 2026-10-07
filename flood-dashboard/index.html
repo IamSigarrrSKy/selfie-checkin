@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0e5a52">
+<title>หน่วยบริการช่วยเหลือน้ำท่วม</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: หัว (ชื่อ + สถานะสด) > KPI 4 ช่อง > กำลังให้บริการรายด้าน | แผนที่ > จังหวัด | รายวัน > ตารางหน่วยงาน */
+:root{
+  --bg:#f3f6f4; --surface:#ffffff; --surface-2:#e8efec; --line:#d5e0db; --grid:#e4ebe8;
+  --fg:#14211e; --muted:#5b6d68;
+  --accent:#0e5a52; --accent-fg:#ffffff; --accent-soft:#d6ebe6; --bar:#2a8577;
+  --ok:#1d7a46; --ok-soft:#dcf1e3; --warn:#a15c00; --warn-soft:#fbecd3; --bad:#b4282f;
+  --shadow:0 1px 2px rgba(14,40,36,.06),0 6px 20px rgba(14,40,36,.06);
+  --font:"IBM Plex Sans Thai",system-ui,"Leelawadee UI",Tahoma,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:14px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1513; --surface:#15201d; --surface-2:#1c2a26; --line:#2a3b36; --grid:#22312d;
+  --fg:#e5efec; --muted:#93a7a1;
+  --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34; --bar:#4fb3a2;
+  --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0d1513; --surface:#15201d; --surface-2:#1c2a26; --line:#2a3b36; --grid:#22312d;
+  --fg:#e5efec; --muted:#93a7a1;
+  --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34; --bar:#4fb3a2;
+  --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.wrap{max-width:1280px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.top h1{margin:0;font-size:22px;line-height:1.3;font-weight:700;text-wrap:balance}
+.top p{margin:2px 0 0;color:var(--muted);font-size:14px}
+.live{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.status{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 2s infinite}
+.status.paused .dot{background:var(--muted);animation:none}
+.status.error .dot{background:var(--bad);animation:none}
+.status.loading .dot{background:var(--warn)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;font-weight:600;text-decoration:none;color:var(--fg)}
+.btn:hover{background:var(--surface-2)}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px}
+.card h2{margin:0 0 2px;font-size:16px;font-weight:600}
+.card .sub{margin:0 0 14px;color:var(--muted);font-size:13px}
+.grid{display:grid;gap:16px}
+.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:minmax(0,1fr)}}
+
+.kpi .label{color:var(--muted);font-size:13px}
+.kpi .value{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:34px;font-weight:600;line-height:1.15;letter-spacing:-.02em}
+.kpi .value.text{font-family:var(--font);font-size:20px;letter-spacing:0;line-height:1.35;padding-top:6px}
+.kpi .note{color:var(--muted);font-size:12.5px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.delta{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--ok-soft);color:var(--ok);font-weight:600;font-size:12px}
+
+/* horizontal bar list */
+.bars{display:flex;flex-direction:column;gap:2px}
+.brow{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr) auto;align-items:center;gap:10px;padding:5px 6px;border-radius:8px;cursor:pointer;border:0;background:none;text-align:left;width:100%}
+.brow:hover,.brow.on{background:var(--surface-2)}
+.brow .name{font-size:13.5px;line-height:1.3}
+.brow .track{height:14px;position:relative}
+.brow .fill{position:absolute;inset:0 auto 0 0;background:var(--bar);border-radius:0 4px 4px 0;min-width:2px;transition:width .5s}
+.brow .val{font-size:13px;text-align:right;white-space:nowrap}
+.brow .val b{font-family:var(--mono);font-weight:600}
+.brow .val small{color:var(--muted)}
+@media (max-width:600px){
+  .brow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"name val" "track track";row-gap:4px}
+  .brow .name{grid-area:name}.brow .val{grid-area:val}.brow .track{grid-area:track;height:10px}
+  .kpi .note{white-space:normal}
+  .kpi .value{font-size:28px}
+}
+.axis-note{color:var(--muted);font-size:12px;margin-top:8px}
+
+/* columns per day */
+.cols{display:flex;align-items:flex-end;gap:2px;height:190px;border-bottom:1px solid var(--line);padding-top:28px}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative;cursor:default;min-width:0}
+.col .c{width:min(36px,80%);background:var(--bar);border-radius:4px 4px 0 0;transition:height .5s}
+.col .c.z{height:0!important}
+.col .t{position:absolute;font-size:12px;font-family:var(--mono);color:var(--fg);transform:translateY(-100%)}
+.col:hover .c{filter:brightness(1.15)}
+.xlabels{display:flex;gap:2px;margin-top:4px}
+.xlabels span{flex:1;text-align:center;font-size:11.5px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
+
+/* map */
+#map{height:420px;border-radius:10px;border:1px solid var(--line);z-index:0}
+.leaflet-popup-content{font:13px/1.5 var(--font);margin:10px 12px}
+.leaflet-popup-content b{font-size:14px}
+.map-note{color:var(--muted);font-size:12.5px;margin-top:8px}
+
+/* table */
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.tools input,.tools select{padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);min-width:0}
+.tools input{flex:1 1 240px}
+.tools select{flex:0 1 220px}
+.filter-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:600;border:0}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px}
+th{position:sticky;top:0;background:var(--surface-2);text-align:left;font-weight:600;font-size:12.5px;color:var(--muted);padding:8px 10px;white-space:nowrap}
+td{padding:8px 10px;border-top:1px solid var(--grid);vertical-align:top}
+tr.main{cursor:pointer}
+tr.main:hover td{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
+tr.new td{animation:flash 6s ease-out}
+@keyframes flash{0%,40%{background:var(--warn-soft)}100%{background:transparent}}
+td.when{white-space:nowrap;color:var(--muted);font-family:var(--mono);font-size:12.5px}
+td .inst{font-weight:600}
+td .who{color:var(--muted);font-size:12.5px}
+.tags{display:flex;flex-wrap:wrap;gap:4px}
+.tag{padding:1px 8px;border-radius:999px;background:var(--surface-2);font-size:12px;white-space:nowrap}
+.tag b{font-family:var(--mono);font-weight:600}
+tr.detail td{background:var(--bg);padding:12px 14px}
+.dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;font-size:13px}
+.dl dt{color:var(--muted)}
+.dl dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.count{color:var(--muted);font-size:13px;margin-left:auto;align-self:center}
+
+#tip{position:fixed;pointer-events:none;z-index:1000;background:var(--fg);color:var(--bg);padding:6px 10px;border-radius:8px;font-size:12.5px;line-height:1.4;max-width:260px;opacity:0;transition:opacity .1s}
+#tip.show{opacity:1}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--accent);color:var(--accent-fg);padding:10px 18px;border-radius:999px;font-weight:600;box-shadow:var(--shadow);z-index:1001}
+.foot{color:var(--muted);font-size:12.5px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>หน่วยบริการช่วยเหลือผู้ประสบอุทกภัย</h1>
+      <p>ข้อมูลจากแบบฟอร์มของหน่วยงาน/สถาบันอุดมศึกษา/วิทยาลัยชุมชน อัปเดตอัตโนมัติ</p>
+    </div>
+    <div class="live">
+      <span class="status loading" id="status"><span class="dot"></span><span id="status-text">กำลังโหลด…</span></span>
+      <button class="btn" id="pause" type="button">หยุดอัปเดต</button>
+      <button class="btn" id="refresh" type="button">รีเฟรชตอนนี้</button>
+      <a class="btn" id="sheet-link" target="_blank" rel="noopener">เปิด Sheet</a>
+    </div>
+  </header>
+
+  <section class="grid kpis">
+    <div class="card kpi"><div class="label">หน่วยงานที่ลงทะเบียน</div><div class="value" id="k-total">–</div><div class="note" id="k-total-note">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">จังหวัดที่มีจุดบริการ</div><div class="value" id="k-prov">–</div><div class="note" id="k-prov-note">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">อาสาทำความสะอาดรวม (คน/วัน)</div><div class="value" id="k-vol">–</div><div class="note" id="k-vol-note">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">ลงทะเบียนล่าสุด</div><div class="value text" id="k-last">–</div><div class="note" id="k-last-note">&nbsp;</div></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>บริการที่หน่วยงานเสนอ</h2>
+      <p class="sub">ความยาวแท่ง = จำนวนหน่วยงานที่ให้บริการด้านนั้น · ตัวเลขขวา = กำลังรวมต่อวันที่ระบุไว้ · กดแท่งเพื่อกรองตาราง</p>
+      <div class="bars" id="services"></div>
+      <div class="axis-note">กำลังรวมนับเฉพาะหน่วยงานที่ระบุเป็นตัวเลข ถ้าระบุเป็นช่วง เช่น 10–30 จะนับค่าต่ำสุด</div>
+    </div>
+    <div class="card">
+      <h2>แผนที่จุดให้บริการ</h2>
+      <p class="sub">จุดหลักของแต่ละหน่วยงาน กดหมุดเพื่อดูผู้ประสานงานและบริการ</p>
+      <div id="map" role="region" aria-label="แผนที่จุดให้บริการ"></div>
+      <div class="map-note" id="map-note"></div>
+    </div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>จำนวนหน่วยงานรายจังหวัด</h2>
+      <p class="sub">จังหวัดของจุดให้บริการหลัก · กดแท่งเพื่อกรองตาราง</p>
+      <div class="bars" id="provinces"></div>
+    </div>
+    <div class="card">
+      <h2>การลงทะเบียนรายวัน</h2>
+      <p class="sub">จำนวนแบบฟอร์มที่ส่งเข้ามาในแต่ละวัน</p>
+      <div class="cols" id="days"></div>
+      <div class="xlabels" id="days-x"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>รายชื่อหน่วยงาน</h2>
+    <p class="sub">ใหม่สุดอยู่บน กดแถวเพื่อดูรายละเอียดทั้งหมด</p>
+    <div class="tools">
+      <input id="q" type="search" placeholder="ค้นหาชื่อหน่วยงาน ผู้ประสานงาน จังหวัด…" aria-label="ค้นหา">
+      <select id="f-prov" aria-label="กรองจังหวัด"><option value="">ทุกจังหวัด</option></select>
+      <select id="f-svc" aria-label="กรองบริการ"><option value="">ทุกบริการ</option></select>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ลงทะเบียน</th><th>หน่วยงาน / ผู้ประสานงาน</th><th>จังหวัด</th><th>เบอร์ติดต่อ</th><th>บริการ (ต่อวัน)</th><th>แผนที่</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">กำลังโหลดข้อมูล…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">Google Sheet อาจใช้เวลาประมาณ 1 นาทีกว่าคำตอบใหม่จะปรากฏในไฟล์ส่งออก หน้านี้ดึงข้อมูลใหม่ทุก <span id="every"></span> วินาที</p>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ===================== ตั้งค่า ===================== */
+const SHEET_ID = '1iNxVCwMDDQjpPK51KURQ3KScnEsXUd8XRvavlOrsguU';
+const GID = '529790678';
+const REFRESH_SEC = 30;
+// export?format=csv ได้ค่าดิบทุกช่อง (gviz เดาชนิดคอลัมน์แล้วทิ้งช่องที่เป็นข้อความปนตัวเลข)
+const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit#gid=${GID}`;
+
+/* คอลัมน์หาจากคำในหัวตาราง ฟอร์มเพิ่ม/สลับคอลัมน์ได้โดยไม่ต้องแก้โค้ด */
+const COLS = {
+  ts: 'ประทับเวลา', inst: 'หน่วยงาน/สถาบัน', org: 'สังกัด', contact: 'ผู้ประสานงาน', phone: 'เบอร์ติดต่อ',
+  email: 'Email', line: 'Line', place: 'สถานที่ตั้งหน่วยให้บริการหลัก ระบุพิกัด', place2: 'สถานที่ตั้งอื่น',
+  sub: 'แขวง/ตำบล', dist: 'เขต/อำเภอ', prov: 'จังหวัด (สถานที่ตั้ง', lat: 'Latitude', lng: 'Longitude'
+};
+const SERVICES = [
+  { key: 'moto',  find: 'จักรยานยนต์',   name: 'ซ่อมรถจักรยานยนต์',      unit: 'คัน' },
+  { key: 'car',   find: 'ซ่อมรถยนต์',     name: 'ซ่อมรถยนต์',            unit: 'คัน' },
+  { key: 'small', find: 'ขนาดเล็ก',       name: 'ซ่อมเครื่องใช้ไฟฟ้าเล็ก', unit: 'เครื่อง' },
+  { key: 'big',   find: 'ขนาดใหญ่',       name: 'ซ่อมเครื่องใช้ไฟฟ้าใหญ่', unit: 'เครื่อง' },
+  { key: 'elec',  find: 'ระบบไฟฟ้า',      name: 'ระบบไฟฟ้าในครัวเรือน',   unit: 'ครัวเรือน' },
+  { key: 'clean', find: 'ทำความสะอาด',    name: 'อาสาทำความสะอาด',       unit: 'คน' },
+  { key: 'med',   find: 'แพทย์',          name: 'แพทย์/สาธารณสุข',        unit: 'ราย' },
+  { key: 'job',   find: 'จ้างงาน',        name: 'จ้างงานฉุกเฉิน',         unit: '', noSum: true },
+  { key: 'other', find: 'อื่นๆ',          name: 'อื่นๆ (เช่น ศูนย์พักพิง ของบริจาค)', unit: '', noSum: true, multi: true }
+];
+
+const PROVINCES = ['กรุงเทพมหานคร','กระบี่','กาญจนบุรี','กาฬสินธุ์','กำแพงเพชร','ขอนแก่น','จันทบุรี','ฉะเชิงเทรา','ชลบุรี','ชัยนาท','ชัยภูมิ','ชุมพร','เชียงราย','เชียงใหม่','ตรัง','ตราด','ตาก','นครนายก','นครปฐม','นครพนม','นครราชสีมา','นครศรีธรรมราช','นครสวรรค์','นนทบุรี','นราธิวาส','น่าน','บึงกาฬ','บุรีรัมย์','ปทุมธานี','ประจวบคีรีขันธ์','ปราจีนบุรี','ปัตตานี','พระนครศรีอยุธยา','พะเยา','พังงา','พัทลุง','พิจิตร','พิษณุโลก','เพชรบุรี','เพชรบูรณ์','แพร่','ภูเก็ต','มหาสารคาม','มุกดาหาร','แม่ฮ่องสอน','ยโสธร','ยะลา','ร้อยเอ็ด','ระนอง','ระยอง','ราชบุรี','ลพบุรี','ลำปาง','ลำพูน','เลย','ศรีสะเกษ','สกลนคร','สงขลา','สตูล','สมุทรปราการ','สมุทรสงคราม','สมุทรสาคร','สระแก้ว','สระบุรี','สิงห์บุรี','สุโขทัย','สุพรรณบุรี','สุราษฎร์ธานี','สุรินทร์','หนองคาย','หนองบัวลำภู','อ่างทอง','อำนาจเจริญ','อุดรธานี','อุตรดิตถ์','อุทัยธานี','อุบลราชธานี'];
+// ชื่อสั้นที่เป็นคำทั่วไปด้วย ใช้เฉพาะเมื่อพิมพ์ในช่องจังหวัดตรงตัว ไม่ค้นจากข้อความอิสระ
+const RISKY = new Set(['เลย', 'แพร่', 'ตาก', 'น่าน', 'ตรัง', 'ยะลา']);
+const PROV_ALIAS = [[/^(กทม|กทม\.|กทมฯ|กรุงเทพ|กรุงเทพฯ|bangkok)$/i, 'กรุงเทพมหานคร'], [/ปราจีนบัรี/, 'ปราจีนบุรี'], [/^อยุธยา$/, 'พระนครศรีอยุธยา']];
+// หน่วยงานที่กรอกแค่ลิงก์แผนที่ ไม่มีชื่อจังหวัด: เดาจากชื่อวิทยาเขตที่รู้ที่ตั้งแน่นอน
+const CAMPUS_PROV = [
+  [/ราชนครินทร์/, 'ฉะเชิงเทรา'], [/บัณฑิตพัฒนบริหาร|นิด้า/, 'กรุงเทพมหานคร'], [/บ้านสมเด็จ/, 'กรุงเทพมหานคร'],
+  [/สนามจันทร์/, 'นครปฐม'], [/ราชมงคลอีสาน/, 'นครราชสีมา'], [/ราชมงคลธัญบุรี/, 'ปทุมธานี'], [/ราชพฤกษ์/, 'นนทบุรี'],
+  [/สวนสุนันทา/, 'กรุงเทพมหานคร'], [/ราชภัฏพ(ระน|รนะ)คร(?!ศรี)/, 'กรุงเทพมหานคร'], [/พระจอมเกล้าพระนครเหนือ/, 'กรุงเทพมหานคร'],
+  [/พระจอมเกล้าธนบุรี/, 'กรุงเทพมหานคร'], [/จุฬาภรณ์/, 'กรุงเทพมหานคร'], [/วไลยอลงกรณ์/, 'ปทุมธานี'],
+  [/ราชมงคลรัตนโกสินทร์/, 'นครปฐม'], [/ศรีนครินทรวิโรฒ\s*องครักษ์/, 'นครนายก']
+];
+const EN_PROV = [[/bangkok/i, 'กรุงเทพมหานคร'], [/nonthaburi/i, 'นนทบุรี'], [/pathum\s*thani/i, 'ปทุมธานี'], [/samut\s*prakan/i, 'สมุทรปราการ'], [/nakhon\s*pathom/i, 'นครปฐม'], [/chachoengsao/i, 'ฉะเชิงเทรา'], [/chon\s*buri/i, 'ชลบุรี'], [/ayutthaya/i, 'พระนครศรีอยุธยา']];
+const BKK_DISTRICTS = ['พระนคร','ดุสิต','หนองจอก','บางรัก','บางเขน','บางกะปิ','ปทุมวัน','ป้อมปราบ','พระโขนง','มีนบุรี','ลาดกระบัง','ยานนาวา','สัมพันธวงศ์','พญาไท','ธนบุรี','บางกอกใหญ่','ห้วยขวาง','คลองสาน','ตลิ่งชัน','บางกอกน้อย','บางขุนเทียน','ภาษีเจริญ','หนองแขม','ราษฎร์บูรณะ','บางพลัด','ดินแดง','บึงกุ่ม','สาทร','บางซื่อ','จตุจักร','บางคอแหลม','ประเวศ','คลองเตย','สวนหลวง','จอมทอง','ดอนเมือง','ราชเทวี','ลาดพร้าว','วัฒนา','บางแค','หลักสี่','สายไหม','คันนายาว','สะพานสูง','วังทองหลาง','คลองสามวา','บางนา','ทวีวัฒนา','ทุ่งครุ','บางบอน'];
+
+/* ===================== แปลงข้อมูล ===================== */
+function parseCSV(s) {
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === '"') { if (s[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+    else if (c !== '\r') f += c;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+
+const clean = s => String(s || '').replace(/[​-‍﻿]/g, '').trim();
+
+// "30/9/2026, 12:08:54" (ปี พ.ศ. ก็ได้)
+function parseTs(s) {
+  const m = clean(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\D+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  let y = +m[3]; if (y > 2400) y -= 543;
+  return new Date(y, +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0));
+}
+
+const NONE = /^(-+|–|—|no|none|n\/a|0|ไม่มี.*|ไม่สามารถ.*|ไม่ได้.*|ไม่ได้ให้บริการ.*)$/i;
+// คืน null = ไม่ให้บริการ, { n: ตัวเลขหรือ null, text }
+function parseService(raw) {
+  const s = clean(raw);
+  if (!s || NONE.test(s)) return null;
+  const t = s.replace(/,/g, '');
+  const unit = t.match(/(\d+(?:\.\d+)?)\s*(?:[-–]\s*\d+\s*)?(?:คัน|เครื่อง|หลัง|ครัว|คน|ราย|ชุด|\/|ต่อ|\(|\|)/);
+  let n = unit ? +unit[1] : null;
+  if (n === null && t.length <= 25) {
+    const m = t.match(/(\d+(?:\.\d+)?)(?!\s*วัน)/);   // "5 วันทำการ" คือจำนวนวัน ไม่ใช่กำลัง
+    if (m && !/^\d+\s*วัน/.test(t.slice(m.index))) n = +m[1];
+  }
+  if (n === 0) return null;
+  return { n, text: s };
+}
+
+function normProvince(raw) {
+  let s = clean(raw).replace(/^(จังหวัด|จ\.)\s*/, '').trim();
+  for (const [re, to] of PROV_ALIAS) if (re.test(s)) return to;
+  return PROVINCES.includes(s) ? s : '';
+}
+const PROV_SEARCH = [...PROVINCES].filter(p => !RISKY.has(p)).sort((a, b) => b.length - a.length);
+function findProvince(text) {
+  const s = clean(text);
+  if (/กรุงเทพ|กทม/.test(s)) return 'กรุงเทพมหานคร';
+  return PROV_SEARCH.find(p => s.includes(p)) || (EN_PROV.find(([re]) => re.test(s)) || [])[1] || '';
+}
+const findCampus = inst => (CAMPUS_PROV.find(([re]) => re.test(clean(inst))) || [])[1] || '';
+const findBkkDistrict = s => BKK_DISTRICTS.some(d => clean(s).includes(d)) ? 'กรุงเทพมหานคร' : '';
+
+// พิกัดพิมพ์มาหลายแบบ: 13.71, 13.71° N, 13°41'20.1"N, "lat, lng" สลับช่อง, 100. 404470
+const inTH = { lat: v => v >= 5.5 && v <= 20.6, lng: v => v >= 97.3 && v <= 105.7 };
+function parseCoords(text) {
+  const s = clean(text).replace(/(\d)\.\s+(\d)/g, '$1.$2');
+  let lat = null, lng = null;
+  const dms = /(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*([\d.]+)\s*(?:["″]|'')?\s*([NSEW])/gi;
+  let m;
+  while ((m = dms.exec(s))) {
+    const v = +m[1] + +m[2] / 60 + +m[3] / 3600;
+    if (/[NS]/i.test(m[4]) && lat === null && inTH.lat(v)) lat = v;
+    if (/[EW]/i.test(m[4]) && lng === null && inTH.lng(v)) lng = v;
+  }
+  if (lat !== null && lng !== null) return [lat, lng];
+  const nums = (s.replace(dms, ' ').match(/\d{1,3}\.\d{2,}/g) || []).map(Number);
+  for (const v of nums) {
+    if (lat === null && inTH.lat(v)) lat = v;
+    else if (lng === null && inTH.lng(v)) lng = v;
+  }
+  return lat !== null && lng !== null ? [lat, lng] : null;
+}
+
+function firstUrl(s) { const m = clean(s).match(/https?:\/\/\S+/); return m ? m[0] : ''; }
+
+function toRecords(rows) {
+  const head = rows[0].map(clean);
+  const idx = k => head.findIndex(h => h.includes(k));
+  const col = {}; for (const k in COLS) col[k] = idx(COLS[k]);
+  const svcCols = SERVICES.map(s => s.multi
+    ? head.map((h, i) => h.includes(s.find) ? i : -1).filter(i => i >= 0)
+    : [idx(s.find)]);
+  const get = (r, k) => col[k] >= 0 ? clean(r[col[k]]) : '';
+
+  return rows.slice(1).map((r, i) => {
+    const inst = get(r, 'inst');
+    if (!inst || /^(test|ทดสอบ)/i.test(inst)) return null;   // แถวทดสอบฟอร์ม
+    const svc = {};
+    SERVICES.forEach((s, j) => {
+      const parts = svcCols[j].map(c => parseService(r[c])).filter(Boolean);
+      if (parts.length) svc[s.key] = { n: s.multi ? null : parts[0].n, text: parts.map(p => p.text).join('\n') };
+    });
+    const place = get(r, 'place'), prov =
+      normProvince(get(r, 'prov')) || findProvince(get(r, 'prov')) || findProvince(get(r, 'dist')) ||
+      findProvince(place) || findProvince(inst) || findCampus(inst) ||
+      findBkkDistrict(get(r, 'dist')) || findBkkDistrict(place) || findBkkDistrict(inst);
+    return {
+      id: get(r, 'ts') + '|' + inst, row: i + 2, ts: parseTs(get(r, 'ts')), inst,
+      contact: get(r, 'contact'), phone: get(r, 'phone'), email: get(r, 'email'), line: get(r, 'line'),
+      place, place2: get(r, 'place2'), sub: get(r, 'sub'), dist: get(r, 'dist'), prov: prov || 'ไม่ระบุ',
+      coords: parseCoords(get(r, 'lat') + ' ' + get(r, 'lng')) || parseCoords(place),
+      mapUrl: firstUrl(place), svc
+    };
+  }).filter(Boolean);
+}
+
+/* ===================== แสดงผล ===================== */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => n.toLocaleString('th-TH');
+const thDate = d => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+const thTime = d => d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+function ago(d) {
+  const s = (Date.now() - d) / 1000;
+  if (s < 60) return 'เมื่อสักครู่';
+  if (s < 3600) return Math.floor(s / 60) + ' นาทีที่แล้ว';
+  if (s < 86400) return Math.floor(s / 3600) + ' ชั่วโมงที่แล้ว';
+  return Math.floor(s / 86400) + ' วันที่แล้ว';
+}
+
+let data = [], seen = null, filt = { q: '', prov: '', svc: '' }, openRow = null;
+
+function renderKpis() {
+  const dayAgo = Date.now() - 86400000;
+  const recent = data.filter(r => r.ts && r.ts > dayAgo).length;
+  $('k-total').textContent = fmt(data.length);
+  $('k-total-note').innerHTML = recent ? `<span class="delta">+${recent}</span> ใน 24 ชั่วโมงที่ผ่านมา` : 'ไม่มีรายการใหม่ใน 24 ชั่วโมง';
+
+  const provs = new Set(data.map(r => r.prov).filter(p => p !== 'ไม่ระบุ'));
+  const unknown = data.filter(r => r.prov === 'ไม่ระบุ').length;
+  $('k-prov').textContent = fmt(provs.size);
+  $('k-prov-note').textContent = unknown ? `ไม่ระบุจังหวัด ${unknown} หน่วยงาน` : 'ระบุจังหวัดครบทุกหน่วยงาน';
+
+  const vol = data.filter(r => r.svc.clean);
+  $('k-vol').textContent = fmt(vol.reduce((a, r) => a + (r.svc.clean.n || 0), 0));
+  $('k-vol-note').textContent = `จาก ${vol.length} หน่วยงาน`;
+
+  const last = data.filter(r => r.ts).sort((a, b) => b.ts - a.ts)[0];
+  $('k-last').textContent = last ? last.inst : '–';
+  $('k-last').title = last ? last.inst : '';
+  $('k-last-note').textContent = last ? `${ago(last.ts)} · ${thDate(last.ts)} ${thTime(last.ts)} น.` : '';
+}
+
+function barList(el, items, onPick, active) {
+  const max = Math.max(1, ...items.map(i => i.count));
+  el.innerHTML = items.map(i => `
+    <button class="brow${active === i.key ? ' on' : ''}" type="button" data-key="${esc(i.key)}" data-tip="${esc(i.tip)}" aria-pressed="${active === i.key}">
+      <span class="name">${esc(i.label)}</span>
+      <span class="track"><span class="fill" style="width:${(i.count / max * 100).toFixed(1)}%"></span></span>
+      <span class="val">${i.val}</span>
+    </button>`).join('');
+  el.querySelectorAll('.brow').forEach(b => b.onclick = () => onPick(b.dataset.key));
+}
+
+function renderServices() {
+  const items = SERVICES.map(s => {
+    const rs = data.filter(r => r.svc[s.key]);
+    const known = rs.filter(r => r.svc[s.key].n != null);
+    const sum = known.reduce((a, r) => a + r.svc[s.key].n, 0);
+    const val = `<b>${rs.length}</b> <small>แห่ง</small>` + (s.noSum || !known.length ? '' : ` · <b>${fmt(sum)}</b> <small>${s.unit}/วัน</small>`);
+    const tip = `${s.name}\n${rs.length} หน่วยงาน` + (s.noSum ? '' : `\nกำลังรวม ${fmt(sum)} ${s.unit}/วัน (ระบุตัวเลข ${known.length} แห่ง)`);
+    return { key: s.key, label: s.name, count: rs.length, val, tip };
+  });
+  barList($('services'), items, k => setFilter('svc', filt.svc === k ? '' : k), filt.svc);
+}
+
+function renderProvinces() {
+  const m = new Map();
+  data.forEach(r => m.set(r.prov, (m.get(r.prov) || 0) + 1));
+  let list = [...m].filter(([p]) => p !== 'ไม่ระบุ').sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'th'));
+  const TOP = 12;
+  const items = list.slice(0, TOP).map(([p, c]) => ({ key: p, label: p, count: c, val: `<b>${c}</b> <small>แห่ง</small>`, tip: `${p}: ${c} หน่วยงาน` }));
+  const rest = list.slice(TOP);
+  if (rest.length) {
+    const c = rest.reduce((a, x) => a + x[1], 0);
+    items.push({ key: '', label: `อีก ${rest.length} จังหวัด`, count: c, val: `<b>${c}</b> <small>แห่ง</small>`, tip: rest.map(x => `${x[0]} ${x[1]}`).join(', ') });
+  }
+  if (m.get('ไม่ระบุ')) items.push({ key: 'ไม่ระบุ', label: 'ไม่ระบุจังหวัด', count: m.get('ไม่ระบุ'), val: `<b>${m.get('ไม่ระบุ')}</b> <small>แห่ง</small>`, tip: 'หน่วยงานที่ไม่ได้กรอกจังหวัด และหาจากที่อยู่ไม่ได้' });
+  barList($('provinces'), items, k => k && setFilter('prov', filt.prov === k ? '' : k), filt.prov);
+
+  const sel = $('f-prov'), cur = filt.prov;
+  sel.innerHTML = '<option value="">ทุกจังหวัด</option>' + [...m.keys()].sort((a, b) => a.localeCompare(b, 'th'))
+    .map(p => `<option value="${esc(p)}">${esc(p)} (${m.get(p)})</option>`).join('');
+  sel.value = cur;
+}
+
+function renderDays() {
+  const ts = data.filter(r => r.ts).map(r => r.ts);
+  if (!ts.length) { $('days').innerHTML = ''; $('days-x').innerHTML = ''; return; }
+  const day = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const start = Math.min(...ts.map(day)), end = Math.max(day(new Date()), Math.max(...ts.map(day)));
+  const counts = new Map(); ts.forEach(d => counts.set(day(d), (counts.get(day(d)) || 0) + 1));
+  const days = [];
+  for (let t = start; t <= end; t = new Date(new Date(t).setDate(new Date(t).getDate() + 1)).getTime()) days.push(t);
+  const shown = days.slice(-21);
+  const max = Math.max(1, ...shown.map(t => counts.get(t) || 0));
+  const peak = Math.max(...shown.map(t => counts.get(t) || 0));
+  $('days').innerHTML = shown.map(t => {
+    const c = counts.get(t) || 0, d = new Date(t);
+    const label = c && (c === peak || t === shown[shown.length - 1]) ? `<span class="t" style="bottom:${c / max * 100}%">${c}</span>` : '';
+    return `<div class="col" data-tip="${esc(d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }))}\n${c} หน่วยงาน">${label}<div class="c${c ? '' : ' z'}" style="height:${c / max * 100}%"></div></div>`;
+  }).join('');
+  const step = Math.ceil(shown.length / 8);
+  $('days-x').innerHTML = shown.map((t, i) => `<span>${i % step === 0 || i === shown.length - 1 ? esc(thDate(new Date(t))) : ''}</span>`).join('');
+}
+
+/* ---------- แผนที่ ---------- */
+let map, layer, fitted = false;
+function renderMap() {
+  if (!window.L) { $('map').innerHTML = '<div class="empty">โหลดแผนที่ไม่สำเร็จ</div>'; return; }
+  if (!map) {
+    map = L.map('map', { scrollWheelZoom: false }).setView([13.75, 100.6], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+  layer.clearLayers();
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0e5a52';
+  const pts = filtered().filter(r => r.coords);
+  pts.forEach(r => {
+    L.circleMarker(r.coords, { radius: 7, color: '#ffffff', weight: 2, fillColor: accent, fillOpacity: .9 })
+      .bindPopup(popupHtml(r)).addTo(layer);
+  });
+  if (pts.length && !fitted) { map.fitBounds(L.latLngBounds(pts.map(r => r.coords)).pad(.15), { maxZoom: 11 }); fitted = true; }
+  const all = filtered().length, miss = all - pts.length;
+  $('map-note').textContent = `แสดง ${pts.length} จาก ${all} หน่วยงาน` + (miss ? ` · ${miss} หน่วยงานไม่ได้ระบุพิกัดที่อ่านได้ (ดูลิงก์ Google Maps ในตาราง)` : '');
+}
+function popupHtml(r) {
+  return `<b>${esc(r.inst)}</b><br>${esc(r.contact)}<br>${r.phone ? `<a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a><br>` : ''}` +
+    `${esc(r.prov)}<br>${svcTags(r, true)}` + (r.mapUrl ? `<br><a href="${esc(r.mapUrl)}" target="_blank" rel="noopener">เปิดใน Google Maps</a>` : '');
+}
+
+/* ---------- ตาราง ---------- */
+function svcTags(r, plain) {
+  const t = SERVICES.filter(s => r.svc[s.key]).map(s => {
+    const n = r.svc[s.key].n;
+    return plain ? s.name + (n != null && !s.noSum ? ` ${fmt(n)} ${s.unit}` : '')
+      : `<span class="tag">${esc(s.name)}${n != null && !s.noSum ? ` <b>${fmt(n)}</b> ${esc(s.unit)}` : ''}</span>`;
+  });
+  if (plain) return esc(t.join(' · ') || 'ไม่ได้ระบุบริการ');
+  return t.length ? `<div class="tags">${t.join('')}</div>` : '<span class="who">ไม่ได้ระบุบริการ</span>';
+}
+function filtered() {
+  const q = filt.q.toLowerCase();
+  return data.filter(r => (!filt.prov || r.prov === filt.prov) && (!filt.svc || r.svc[filt.svc]) &&
+    (!q || [r.inst, r.contact, r.prov, r.dist, r.place, r.phone, r.email].join(' ').toLowerCase().includes(q)));
+}
+function renderTable(newIds) {
+  const list = filtered().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  $('count').textContent = `${list.length} จาก ${data.length} หน่วยงาน`;
+  if (!list.length) { $('rows').innerHTML = '<tr><td colspan="6" class="empty">ไม่พบหน่วยงานที่ตรงกับตัวกรอง</td></tr>'; return; }
+  $('rows').innerHTML = list.map(r => {
+    const isNew = newIds && newIds.has(r.id);
+    const main = `<tr class="main${isNew ? ' new' : ''}" data-id="${esc(r.id)}" tabindex="0" aria-expanded="${openRow === r.id}">
+      <td class="when">${r.ts ? `${esc(thDate(r.ts))}<br>${esc(thTime(r.ts))}` : ''}</td>
+      <td><div class="inst">${esc(r.inst)}</div><div class="who">${esc(r.contact)}</div></td>
+      <td>${esc(r.prov)}${r.dist ? `<div class="who">${esc(r.dist)}</div>` : ''}</td>
+      <td class="num">${r.phone ? `<a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>` : ''}</td>
+      <td>${svcTags(r)}</td>
+      <td>${r.mapUrl ? `<a href="${esc(r.mapUrl)}" target="_blank" rel="noopener">Maps</a>` : r.coords ? `<a href="https://www.google.com/maps?q=${r.coords.join(',')}" target="_blank" rel="noopener">Maps</a>` : ''}</td></tr>`;
+    return main + (openRow === r.id ? detailRow(r) : '');
+  }).join('');
+  $('rows').querySelectorAll('tr.main').forEach(tr => {
+    const toggle = () => { openRow = openRow === tr.dataset.id ? null : tr.dataset.id; renderTable(); };
+    tr.onclick = e => { if (!e.target.closest('a')) toggle(); };
+    tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+  });
+}
+function detailRow(r) {
+  const items = [
+    ['ผู้ประสานงาน', r.contact], ['เบอร์ติดต่อ', r.phone], ['Email', r.email], ['Line ID', r.line],
+    ['จุดให้บริการหลัก', r.place], ['จุดให้บริการอื่น', r.place2],
+    ['ที่ตั้ง', [r.sub, r.dist, r.prov].filter(Boolean).join(' · ')],
+    ['พิกัด', r.coords ? r.coords.map(v => v.toFixed(5)).join(', ') : ''],
+    ...SERVICES.filter(s => r.svc[s.key]).map(s => [s.name, r.svc[s.key].text]),
+    ['แถวใน Sheet', String(r.row)]
+  ].filter(x => x[1]);
+  return `<tr class="detail"><td colspan="6"><dl class="dl">${items.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></td></tr>`;
+}
+
+function setFilter(k, v) {
+  filt[k] = v;
+  if (k === 'prov') $('f-prov').value = v;
+  if (k === 'svc') $('f-svc').value = v;
+  renderAll();
+}
+function renderAll(newIds) {
+  renderKpis(); renderServices(); renderProvinces(); renderDays(); renderTable(newIds); renderMap();
+}
+
+/* ===================== ดึงข้อมูลแบบสด ===================== */
+let timer = null, paused = false, busy = false, lastOk = null;
+function setStatus(cls, text) { $('status').className = 'status ' + cls; $('status-text').textContent = text; }
+
+async function load() {
+  if (busy) return;
+  busy = true;
+  if (!lastOk) setStatus('loading', 'กำลังโหลด…');
+  try {
+    const res = await fetch(CSV_URL + '&_=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    if (/^\s*</.test(text)) throw new Error('Sheet ไม่ได้เปิดให้ทุกคนที่มีลิงก์ดูได้');
+    const next = toRecords(parseCSV(text));
+    let newIds = null;
+    if (seen) {
+      newIds = new Set(next.filter(r => !seen.has(r.id)).map(r => r.id));
+      if (newIds.size) toast(`มีหน่วยงานลงทะเบียนใหม่ ${newIds.size} แห่ง`);
+    }
+    seen = new Set(next.map(r => r.id));
+    data = next;
+    renderAll(newIds);
+    lastOk = new Date();
+    setStatus(paused ? 'paused' : '', (paused ? 'หยุดอัปเดต · ' : 'สด · ') + 'อัปเดต ' + lastOk.toLocaleTimeString('th-TH'));
+  } catch (err) {
+    // Google ไม่ส่ง CORS ให้ origin "null": เปิดไฟล์จากเครื่องโดยตรงจึงดึงข้อมูลไม่ได้ ต้องเปิดผ่านเว็บ
+    if (!/^https?:$/.test(location.protocol)) err = new Error('ต้องเปิดหน้านี้ผ่านเว็บ (เช่น GitHub Pages) ไม่ใช่เปิดไฟล์จากเครื่อง');
+    setStatus('error', 'ดึงข้อมูลไม่สำเร็จ: ' + err.message + (lastOk ? ' (แสดงข้อมูลเมื่อ ' + lastOk.toLocaleTimeString('th-TH') + ')' : ''));
+  } finally { busy = false; }
+}
+function schedule() {
+  clearInterval(timer);
+  if (!paused) timer = setInterval(() => { if (!document.hidden) load(); }, REFRESH_SEC * 1000);
+}
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 5000);
+}
+
+/* ---------- tooltip ---------- */
+const tip = $('tip');
+document.addEventListener('pointermove', e => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) { tip.classList.remove('show'); return; }
+  tip.innerHTML = esc(el.dataset.tip).replace(/\n/g, '<br>');
+  tip.classList.add('show');
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(innerWidth - w - 8, e.clientX + 12) + 'px';
+  tip.style.top = (e.clientY - h - 12 < 0 ? e.clientY + 16 : e.clientY - h - 12) + 'px';
+});
+
+/* ---------- เริ่มทำงาน ---------- */
+$('sheet-link').href = SHEET_URL;
+$('every').textContent = REFRESH_SEC;
+$('f-svc').innerHTML += SERVICES.map(s => `<option value="${s.key}">${esc(s.name)}</option>`).join('');
+let qTimer;
+$('q').oninput = e => { clearTimeout(qTimer); qTimer = setTimeout(() => { filt.q = e.target.value.trim(); renderTable(); renderMap(); }, 150); };
+$('f-prov').onchange = e => setFilter('prov', e.target.value);
+$('f-svc').onchange = e => setFilter('svc', e.target.value);
+$('refresh').onclick = load;
+$('pause').onclick = () => {
+  paused = !paused;
+  $('pause').textContent = paused ? 'อัปเดตต่อ' : 'หยุดอัปเดต';
+  schedule();
+  if (!paused) load(); else if (lastOk) setStatus('paused', 'หยุดอัปเดต · ข้อมูลเมื่อ ' + lastOk.toLocaleTimeString('th-TH'));
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !paused) load(); });
+setInterval(() => { if (data.length) renderKpis(); }, 60000);   // "x นาทีที่แล้ว" เดินเอง
+load(); schedule();
+</script>
+</body>
+</html>
