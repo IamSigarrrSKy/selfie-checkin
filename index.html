@@ -299,6 +299,8 @@ button{cursor:pointer}
         <div class="field"><label for="lv-from">ตั้งแต่วันที่</label><input class="input num" type="date" id="lv-from" required></div>
         <div class="field"><label for="lv-to">ถึงวันที่</label><input class="input num" type="date" id="lv-to" required></div>
       </div>
+      <div class="note">เลือกวันที่ย้อนหลังได้ ถ้าแจ้งหัวหน้าไว้แล้วแต่ลืมลงระบบ</div>
+      <div class="field"><label for="lv-told">แจ้งหัวหน้าเมื่อ</label><input class="input num" type="date" id="lv-told"></div>
       <label class="switch" for="lv-skip" style="padding:0">
         <div class="note">ไม่นับวันเสาร์-อาทิตย์</div>
         <input type="checkbox" id="lv-skip" checked>
@@ -1099,7 +1101,7 @@ const LEAVE_TYPES = { sick: 'ลาป่วย', vacation: 'ลาพักผ�
 const thMonth = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' });
 const thDayShort = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short' });
 const fmtDay = k => thDayShort.format(new Date(k + 'T00:00:00'));
-let leaveType = 'sick';
+let leaveType = 'sick', toldTouched = false;
 let leaveMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
 const persistLeaves = () => store.set('ci.leaves', leaves);
 
@@ -1120,6 +1122,7 @@ function openLeaveForm(type) {
   $('#leave-form-title').textContent = LEAVE_TYPES[type];
   const t = dayKey(new Date());
   $('#lv-from').value = t; $('#lv-to').value = t; $('#lv-note').value = '';
+  $('#lv-told').value = t; $('#lv-told').max = t; toldTouched = false;
   $('#lv-name').value = profile.name || '';
   $('#leave-form').hidden = false; updateLeaveCount();
   $('#leave-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1137,10 +1140,12 @@ function saveLeave() {
   if (!name) { $('#lv-name').focus(); toast('กรอกชื่อผู้ลา'); return; }
   if (!profile.name) { profile.name = name; store.set('ci.profile', profile); renderHello(); }
   if (!days.length) { toast('เลือกช่วงวันที่ให้ถูกต้อง'); return; }
+  const told = $('#lv-told').value;
+  if (told > dayKey(new Date())) { $('#lv-told').focus(); toast('วันที่แจ้งหัวหน้าต้องไม่เกินวันนี้'); return; }
   const dup = days.filter(d => leaves.some(l => (l.name || '') === name && l.days.includes(d)));
   if (dup.length) { toast(`มีการลาวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
   leaves.push({ id: uid(), type: leaveType, from, to, days, note: $('#lv-note').value.trim(),
-    createdAt: Date.now(), name });
+    createdAt: Date.now(), name, told });
   persistLeaves();
   $('#leave-form').hidden = true;
   leaveMonth = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1);
@@ -1166,7 +1171,7 @@ function renderLeave() {
     return `<div class="row">
       <div class="row-main">
         <div class="row-title"><span class="chip ${l.type === 'sick' ? 'sick' : 'vac'}">${LEAVE_TYPES[l.type]}</span> ${range}${pend}</div>
-        <div class="row-sub">${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${l.days.length !== n ? ` (ทั้งหมด ${l.days.length} วัน)` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
+        <div class="row-sub">${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${l.days.length !== n ? ` (ทั้งหมด ${l.days.length} วัน)` : ''}${l.told ? ` · แจ้งหัวหน้า ${fmtDay(l.told)}` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
       </div>
       <button class="btn sm danger" data-lv-del="${l.id}">ยกเลิกการลา</button>
     </div>`;
@@ -1183,7 +1188,7 @@ function deleteLeave(id) {
 function leaveRow(l) {
   const c = new Date(l.createdAt);
   return { id: l.id, type: LEAVE_TYPES[l.type], days: l.days, note: l.note || '', name: l.name || profile.name || '',
-    empId: '', created: `${dayKey(c)} ${hms(c)}` };
+    empId: '', created: `${dayKey(c)} ${hms(c)}`, told: l.told || '' };
 }
 
 /* ---------- sites ---------- */
@@ -1260,7 +1265,13 @@ $('#cam-close').onclick = closeCamera;
 $('#shutter').onclick = capture;
 $('#pin-toggle').onclick = () => setManualPin(!manualPin);
 document.querySelectorAll('[data-leave]').forEach(b => b.onclick = () => openLeaveForm(b.dataset.leave));
-$('#lv-from').onchange = () => { if ($('#lv-to').value < $('#lv-from').value) $('#lv-to').value = $('#lv-from').value; updateLeaveCount(); };
+$('#lv-from').onchange = () => {
+  if ($('#lv-to').value < $('#lv-from').value) $('#lv-to').value = $('#lv-from').value;
+  // ลาย้อนหลัง: ตั้งวันที่แจ้งหัวหน้าเป็นวันเริ่มลาไว้ก่อน (แก้เองได้)
+  if (!toldTouched) { const t = dayKey(new Date()), f = $('#lv-from').value; $('#lv-told').value = f && f < t ? f : t; }
+  updateLeaveCount();
+};
+$('#lv-told').onchange = () => { toldTouched = true; };
 $('#lv-to').onchange = updateLeaveCount;
 $('#lv-skip').onchange = updateLeaveCount;
 $('#lv-cancel').onclick = () => $('#leave-form').hidden = true;

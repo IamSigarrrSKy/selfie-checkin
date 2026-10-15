@@ -186,6 +186,8 @@ function onSheetEdit(e) {
       if (!v[COL_REGION - 1] || (e.range.getColumn() <= 7 && e.range.getLastColumn() >= 7)) {
         sh.getRange(row, COL_REGION).setValue(regionOf(v[6]));
       }
+    } else if (typeof v[7] === 'string' && v[7]) {
+      sh.getRange(row, 8).setValue(dateSerial(v[7].trim()));   // แจ้งหัวหน้าเมื่อ
     }
   });
 }
@@ -497,7 +499,7 @@ function buildRegion(ss, name) {
 }
 
 /* ---------- การลา: หนึ่งแถวต่อหนึ่งวันลา (ID เดียวกันสำหรับการลาครั้งเดียวกัน) ---------- */
-const LEAVE_HEADERS = ['ID', 'วันที่ลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'หมายเหตุ', 'แจ้งเมื่อ'];
+const LEAVE_HEADERS = ['ID', 'วันที่ลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'หมายเหตุ', 'ลงระบบเมื่อ', 'แจ้งหัวหน้าเมื่อ'];
 
 function leaveSheet() {
   return book().getSheetByName(LEAVE) || buildLeave(book());
@@ -507,7 +509,8 @@ function addLeave(l) {
   const sh = leaveSheet();
   if (findRow(sh, l.id)) return { ok: true, duplicate: true };
   const name = String(l.name || '').trim() || 'ไม่ระบุชื่อ';
-  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, '', l.note, l.created]);
+  const told = l.told ? dateSerial(l.told) : '';   // วันที่แจ้งหัวหน้า (ลงระบบย้อนหลังได้)
+  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, '', l.note, l.created, told]);
   if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
   return { ok: true };
 }
@@ -532,7 +535,8 @@ function buildLeave(ss) {
   sh.getRange(2, 2, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
   sh.getRange(2, 3, rows, 1).setHorizontalAlignment('center');
   sh.getRange(2, 6, rows, 1).setWrap(true);
-  [70, 140, 100, 160, 110, 260, 150].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  sh.getRange(2, 8, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
+  [70, 140, 100, 160, 110, 260, 150, 140].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(2, 1, rows, n));
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาป่วย')
@@ -642,7 +646,7 @@ function dashboardData(req) {
     lv.getRange(2, 1, lv.getLastRow() - 1, LEAVE_HEADERS.length).getValues().forEach(v => {
       if (!(v[1] instanceof Date) || !normName(v[3])) return;
       const d = fmt(v[1]);
-      if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: normName(v[3]), note: String(v[5] || '') });
+      if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: normName(v[3]), note: String(v[5] || ''), told: v[7] instanceof Date ? fmt(v[7]) : '' });
     });
   }
   return {

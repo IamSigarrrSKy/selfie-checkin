@@ -220,6 +220,7 @@ let password = store.get('dash.pw') || '';   // จำรหัสผ่าน�
 const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const monthLabel = ym => { const [y, m] = ym.split('-').map(Number); return `${TH_MONTHS[m - 1]} ${y + 543}`; };
 const thDate = k => { const [y, m, d] = k.split('-').map(Number), dt = new Date(y, m - 1, d); return `วัน${TH_DOW[dt.getDay()]}ที่ ${d} ${TH_MONTHS[m - 1]} ${y + 543}`; };
+const shortDate = k => { const [y, m, d] = k.split('-').map(Number); return `${d} ${TH_MONTHS[m - 1]} ${y + 543}`; };
 const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const fromMin = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(Math.round(n % 60)).padStart(2, '0')}`;
 const isWeekend = k => { const [y, m, d] = k.split('-').map(Number), w = new Date(y, m - 1, d).getDay(); return w === 0 || w === 6; };
@@ -390,8 +391,8 @@ function render() {
 
   // การลา
   const lvs = data.leaves.slice().sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.name.localeCompare(b.name, 'th'));
-  $('#leaves').innerHTML = lvs.length ? `<table><thead><tr><th>วันที่</th><th>ชื่อ</th><th>ประเภท</th><th>หมายเหตุ</th></tr></thead><tbody>${lvs.map(l =>
-    `<tr><td>${thDate(l.d)}</td><td class="name">${esc(l.name)}</td><td><span class="pill ${l.type === 'ลาป่วย' ? 'p-sick' : 'p-vac'}">${esc(l.type)}</span></td><td class="muted">${esc(l.note)}</td></tr>`).join('')}</tbody></table>`
+  $('#leaves').innerHTML = lvs.length ? `<table><thead><tr><th>วันที่</th><th>ชื่อ</th><th>ประเภท</th><th>แจ้งหัวหน้า</th><th>หมายเหตุ</th></tr></thead><tbody>${lvs.map(l =>
+    `<tr><td>${thDate(l.d)}</td><td class="name">${esc(l.name)}</td><td><span class="pill ${l.type === 'ลาป่วย' ? 'p-sick' : 'p-vac'}">${esc(l.type)}</span></td><td class="muted">${l.told ? shortDate(l.told) : '–'}</td><td class="muted">${esc(l.note)}</td></tr>`).join('')}</tbody></table>`
     : '<div class="empty">ไม่มีการลาในเดือนนี้</div>';
 }
 
