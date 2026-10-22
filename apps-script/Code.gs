@@ -624,31 +624,29 @@ function dashboardData(req) {
   const tz = 'Asia/Bangkok', fmt = d => Utilities.formatDate(d, tz, 'yyyy-MM-dd');
   const ym = /^\d{4}-\d{2}$/.test(String(req.month || '')) ? req.month : Utilities.formatDate(new Date(), tz, 'yyyy-MM');
   const ss = book(), records = [], leaves = [];
-  const log = ss.getSheetByName(LOG);
-  if (log && log.getLastRow() > 1) {
-    const n = log.getLastRow() - 1;
-    const vals = log.getRange(2, 1, n, HEADERS.length).getValues();
-    const times = log.getRange(2, 3, n, 1).getDisplayValues();
-    vals.forEach((v, i) => {
-      if (!(v[1] instanceof Date) || v[14] === 'ใช่' || !normName(v[4])) return;
-      const d = fmt(v[1]), t = String(times[i][0]).match(/^(\d{1,2}):(\d{2})/);
-      if (d.slice(0, 7) !== ym || !t) return;
-      records.push({
-        d: d, t: ('0' + t[1]).slice(-2) + ':' + t[2], out: v[3] === 'เช็คเอาท์' || v[3] === 'ออกงาน',
-        name: normName(v[4]), site: String(v[6] || ''), region: v[COL_REGION - 1] || regionOf(v[6]),
-        lat: typeof v[9] === 'number' ? v[9] : null, lng: typeof v[10] === 'number' ? v[10] : null,
-        photo: String(v[COL_PHOTO_URL - 1] || '')
-      });
+  const log = ss.getSheetByName(LOG), lv = ss.getSheetByName(LEAVE);
+  const nLog = log ? log.getLastRow() - 1 : 0, nLv = lv ? lv.getLastRow() - 1 : 0;
+  const vals = nLog > 0 ? log.getRange(2, 1, nLog, HEADERS.length).getValues() : [];
+  const times = nLog > 0 ? log.getRange(2, 3, nLog, 1).getDisplayValues() : [];
+  const lvVals = nLv > 0 ? lv.getRange(2, 1, nLv, LEAVE_HEADERS.length).getValues() : [];
+  // ชื่อเดียวกันที่พิมพ์ต่างกันรวมเป็นคนเดียว (กติกาเดียวกับใบลงชื่อ)
+  const canon = nameMerger(vals.map(v => v[4]).concat(lvVals.map(v => v[3])), signAliases());
+  vals.forEach((v, i) => {
+    if (!(v[1] instanceof Date) || v[14] === 'ใช่' || !normName(v[4])) return;
+    const d = fmt(v[1]), t = String(times[i][0]).match(/^(\d{1,2}):(\d{2})/);
+    if (d.slice(0, 7) !== ym || !t) return;
+    records.push({
+      d: d, t: ('0' + t[1]).slice(-2) + ':' + t[2], out: v[3] === 'เช็คเอาท์' || v[3] === 'ออกงาน',
+      name: canon(v[4]), site: String(v[6] || ''), region: v[COL_REGION - 1] || regionOf(v[6]),
+      lat: typeof v[9] === 'number' ? v[9] : null, lng: typeof v[10] === 'number' ? v[10] : null,
+      photo: String(v[COL_PHOTO_URL - 1] || '')
     });
-  }
-  const lv = ss.getSheetByName(LEAVE);
-  if (lv && lv.getLastRow() > 1) {
-    lv.getRange(2, 1, lv.getLastRow() - 1, LEAVE_HEADERS.length).getValues().forEach(v => {
-      if (!(v[1] instanceof Date) || !normName(v[3])) return;
-      const d = fmt(v[1]);
-      if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: normName(v[3]), note: String(v[5] || ''), told: v[7] instanceof Date ? fmt(v[7]) : '' });
-    });
-  }
+  });
+  lvVals.forEach(v => {
+    if (!(v[1] instanceof Date) || !normName(v[3])) return;
+    const d = fmt(v[1]);
+    if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: canon(v[3]), note: String(v[5] || ''), told: v[7] instanceof Date ? fmt(v[7]) : '' });
+  });
   return {
     ok: true, month: ym, today: fmt(new Date()), records: records, leaves: leaves,
     regions: REGIONS.map(r => r.name).concat([OTHER_REGION]),
@@ -829,13 +827,13 @@ function setupSignSheet() {
 
   // รายชื่อ: เพิ่มชื่อใหม่ให้อัตโนมัติ เอาเครื่องหมายออกถ้าไม่ต้องทำใบลงชื่อให้คนนั้น
   const nm = sheet(ss, SIGN_NAMES);
-  trimColumns(nm, 3);
-  nm.getRange(1, 1, 1, 3).setValues([['ชื่อ-สกุล (ตรงกับที่พิมพ์ในแอป)', 'ภาค (ว่าง = ตามจุดที่เช็คอิน)', 'ทำใบลงชื่อ']]);
-  styleHeader(nm, 1, 3);
+  trimColumns(nm, 4);
+  nm.getRange(1, 1, 1, 4).setValues([['ชื่อ-สกุล', 'ภาค (ว่าง = ตามจุดที่เช็คอิน)', 'ทำใบลงชื่อ', 'รวมกับชื่อ (ถ้าเป็นคนเดียวกัน)']]);
+  styleHeader(nm, 1, 4);
   nm.getRange(2, 2, nm.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
     .requireValueInList(SIGN_CENTERS.map(c => c[0]), true).setAllowInvalid(false).build());
   nm.getRange(2, 3, nm.getMaxRows() - 1, 1).setHorizontalAlignment('center');
-  [280, 220, 110].forEach((w, i) => nm.setColumnWidth(i + 1, w));
+  [280, 220, 110, 280].forEach((w, i) => nm.setColumnWidth(i + 1, w));
   nm.setTabColor(C.head);
 
   // วันหยุดราชการ: ใส่วันที่ตายตัวของปีที่ตั้งไว้ให้ก่อน
@@ -878,6 +876,46 @@ function normName(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
 }
 
+// ชื่อที่ตัดคำนำหน้าออก ใช้เทียบว่าเป็นคนเดียวกัน
+const NAME_PREFIX = /^(นางสาว|นาง|นาย|น\.ส\.|นส\.|ดร\.|ว่าที่\s*ร\.ต\.)\s*/;
+function nameKey(s) {
+  return normName(s).replace(NAME_PREFIX, '').trim();
+}
+
+// คืนฟังก์ชันแปลงชื่อที่พิมพ์ → ชื่อหลัก: ตัดคำนำหน้า, พิมพ์แค่ชื่อต้นรวมกับชื่อเต็มที่ขึ้นต้นตรงกัน (ถ้ามีคนเดียว),
+// และตามที่กรอกไว้ในคอลัมน์ "รวมกับชื่อ" ของแท็บรายชื่อ (aliases: ชื่อ → ชื่อหลัก)
+function nameMerger(names, aliases) {
+  aliases = aliases || {};
+  const seen = {};
+  names.forEach(n => { const k = nameKey(n); if (k) seen[k] = true; });
+  Object.keys(aliases).forEach(a => { seen[nameKey(aliases[a])] = true; });
+  const all = Object.keys(seen), firstOnly = {};
+  all.forEach(k => {
+    if (k.indexOf(' ') >= 0) return;
+    const full = all.filter(f => f.indexOf(k + ' ') === 0);
+    if (full.length === 1) firstOnly[k] = full[0];
+  });
+  return n => {
+    let k = nameKey(n);
+    if (aliases[k]) k = nameKey(aliases[k]);
+    return firstOnly[k] || k;
+  };
+}
+
+// คอลัมน์ "รวมกับชื่อ" ในแท็บรายชื่อของไฟล์ใบลงชื่อ (ใช้กับแดชบอร์ดด้วย)
+function signAliases() {
+  const a = {};
+  try {
+    const nm = SIGN_SHEET_ID ? signBook().getSheetByName(SIGN_NAMES) : null;
+    if (nm && nm.getLastRow() > 1 && nm.getMaxColumns() >= 4) {
+      nm.getRange(2, 1, nm.getLastRow() - 1, 4).getValues().forEach(r => {
+        if (normName(r[0]) && normName(r[3])) a[nameKey(r[0])] = normName(r[3]);
+      });
+    }
+  } catch (e) { /* ไม่มีไฟล์ใบลงชื่อ */ }
+  return a;
+}
+
 /** สร้างใบลงชื่อของเดือนที่ตั้งไว้ คนละแท็บ (ดึงจากแท็บเช็คอินและการลาของไฟล์หลัก) */
 function makeSignSheets() {
   const ss = signBook(), tz = 'Asia/Bangkok';
@@ -898,39 +936,42 @@ function makeSignSheets() {
   cfg.getRange(7, 1, SIGN_CENTERS.length, 2).getValues().forEach(r => { if (r[0]) centers[r[0]] = r[1]; });
   const signer = cfg.getRange(9 + SIGN_CENTERS.length, 2, SIGN_SIGNER.length, 1).getValues().map(r => r[0]);
 
+  // อ่านข้อมูลทั้งหมดก่อน เพื่อรวมชื่อเดียวกันที่พิมพ์ต่างกันเป็นคนเดียว
+  const log = book().getSheetByName(LOG), lv = book().getSheetByName(LEAVE);
+  const nLog = log ? log.getLastRow() - 1 : 0, nLv = lv ? lv.getLastRow() - 1 : 0;
+  const logVals = nLog > 0 ? log.getRange(2, 1, nLog, HEADERS.length).getValues() : [];
+  const times = nLog > 0 ? log.getRange(2, 3, nLog, 1).getDisplayValues() : [];
+  const lvVals = nLv > 0 ? lv.getRange(2, 1, nLv, LEAVE_HEADERS.length).getValues() : [];
+  const nm = ss.getSheetByName(SIGN_NAMES);
+  const nmRows = nm.getLastRow() > 1 ? nm.getRange(2, 1, nm.getLastRow() - 1, Math.min(4, nm.getMaxColumns())).getValues() : [];
+  const aliases = {};
+  nmRows.forEach(r => { if (normName(r[0]) && normName(r[3])) aliases[nameKey(r[0])] = normName(r[3]); });
+  const canon = nameMerger(logVals.map(v => v[4]).concat(lvVals.map(v => v[3]), nmRows.map(r => r[0])), aliases);
+
   // เช็คอิน: เวลาเข้า = เช็คอินแรกของวัน, เวลาออก = เช็คเอาท์สุดท้ายของวัน (ไม่นับรายการทดสอบ)
   const people = {};
   const person = n => people[n] || (people[n] = { regions: {}, monthRegions: {}, days: {}, leaves: {} });
-  const log = book().getSheetByName(LOG);
-  if (log && log.getLastRow() > 1) {
-    const n = log.getLastRow() - 1;
-    const vals = log.getRange(2, 1, n, HEADERS.length).getValues();
-    const times = log.getRange(2, 3, n, 1).getDisplayValues();
-    vals.forEach((v, i) => {
-      const name = normName(v[4]);
-      if (!name || !(v[1] instanceof Date) || v[14] === 'ใช่') return;
-      const p = person(name), key = keyOf(v[1]), region = v[COL_REGION - 1] || regionOf(v[6]);
-      p.regions[region] = (p.regions[region] || 0) + 1;
-      if (key.slice(0, 7) !== ym) return;
-      const m = String(times[i][0]).match(/^(\d{1,2}):(\d{2})/);
-      if (!m) return;
-      p.monthRegions[region] = (p.monthRegions[region] || 0) + 1;
-      const t = ('0' + m[1]).slice(-2) + ':' + m[2], url = String(v[COL_PHOTO_URL - 1] || '');
-      const d = p.days[key] || (p.days[key] = {});
-      if (v[3] === 'เช็คเอาท์' || v[3] === 'ออกงาน') {
-        if (!d.out || t > d.out.t) d.out = { t: t, url: url };
-      } else if (!d.in || t < d.in.t) d.in = { t: t, url: url };
-    });
-  }
-  const lv = book().getSheetByName(LEAVE);
-  if (lv && lv.getLastRow() > 1) {
-    lv.getRange(2, 1, lv.getLastRow() - 1, LEAVE_HEADERS.length).getValues().forEach(v => {
-      const name = normName(v[3]);
-      if (!name || !(v[1] instanceof Date)) return;
-      const key = keyOf(v[1]);
-      if (key.slice(0, 7) === ym) person(name).leaves[key] = v[2];
-    });
-  }
+  logVals.forEach((v, i) => {
+    const name = canon(v[4]);
+    if (!name || !(v[1] instanceof Date) || v[14] === 'ใช่') return;
+    const p = person(name), key = keyOf(v[1]), region = v[COL_REGION - 1] || regionOf(v[6]);
+    p.regions[region] = (p.regions[region] || 0) + 1;
+    if (key.slice(0, 7) !== ym) return;
+    const m = String(times[i][0]).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return;
+    p.monthRegions[region] = (p.monthRegions[region] || 0) + 1;
+    const t = ('0' + m[1]).slice(-2) + ':' + m[2], url = String(v[COL_PHOTO_URL - 1] || '');
+    const d = p.days[key] || (p.days[key] = {});
+    if (v[3] === 'เช็คเอาท์' || v[3] === 'ออกงาน') {
+      if (!d.out || t > d.out.t) d.out = { t: t, url: url };
+    } else if (!d.in || t < d.in.t) d.in = { t: t, url: url };
+  });
+  lvVals.forEach(v => {
+    const name = canon(v[3]);
+    if (!name || !(v[1] instanceof Date)) return;
+    const key = keyOf(v[1]);
+    if (key.slice(0, 7) === ym) person(name).leaves[key] = v[2];
+  });
   const holidays = {};
   const hd = ss.getSheetByName(SIGN_HOLIDAYS);
   if (hd && hd.getLastRow() > 1) {
@@ -939,19 +980,25 @@ function makeSignSheets() {
     });
   }
 
-  // รายชื่อ: เพิ่มคนที่มีข้อมูลเดือนนี้แต่ยังไม่อยู่ในรายชื่อ
-  const nm = ss.getSheetByName(SIGN_NAMES);
-  const listed = {};
-  if (nm.getLastRow() > 1) {
-    nm.getRange(2, 1, nm.getLastRow() - 1, 3).getValues().forEach(r => { if (normName(r[0])) listed[normName(r[0])] = r; });
-  }
+  // รายชื่อ: หนึ่งแถวต่อหนึ่งคน (ชื่อแบบเดียวกันรวมเป็นแถวเดียว) แถวที่กรอก "รวมกับชื่อ" ไว้คงไว้ตามเดิม
+  const listed = {}, rows = [];
+  nmRows.forEach(r => {
+    if (!normName(r[0])) return;
+    if (normName(r[3])) { rows.push([r[0], r[1], r[2], r[3]]); return; }
+    const c = canon(r[0]);
+    if (listed[c]) return;
+    listed[c] = [c, r[1], r[2], ''];
+    rows.push(listed[c]);
+  });
   const fresh = Object.keys(people).filter(n => !listed[n] &&
     (Object.keys(people[n].days).length || Object.keys(people[n].leaves).length)).sort((a, b) => a.localeCompare(b, 'th'));
-  if (fresh.length) {
-    nm.getRange(nm.getLastRow() + 1, 1, fresh.length, 3).setValues(fresh.map(n => [n, '', true]));
-    fresh.forEach(n => { listed[n] = [n, '', true]; });
+  fresh.forEach(n => { listed[n] = [n, '', true, '']; rows.push(listed[n]); });
+  if (nm.getMaxColumns() < 4) nm.insertColumnsAfter(nm.getMaxColumns(), 4 - nm.getMaxColumns());
+  if (nm.getLastRow() > 1) nm.getRange(2, 1, nm.getLastRow() - 1, 4).clearContent();
+  if (rows.length) {
+    nm.getRange(2, 1, rows.length, 4).setValues(rows);
+    nm.getRange(2, 3, rows.length, 1).insertCheckboxes();
   }
-  if (nm.getLastRow() > 1) nm.getRange(2, 3, nm.getLastRow() - 1, 1).insertCheckboxes();
 
   const names = Object.keys(listed).filter(n => listed[n][2] === true).sort((a, b) => a.localeCompare(b, 'th'));
   const top = o => Object.keys(o).sort((a, b) => o[b] - o[a])[0];
