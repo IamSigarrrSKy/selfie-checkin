@@ -391,8 +391,8 @@ function render() {
 
   // การลา
   const lvs = data.leaves.slice().sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.name.localeCompare(b.name, 'th'));
-  $('#leaves').innerHTML = lvs.length ? `<table><thead><tr><th>วันที่</th><th>ชื่อ</th><th>ประเภท</th><th>แจ้งหัวหน้า</th><th>หมายเหตุ</th></tr></thead><tbody>${lvs.map(l =>
-    `<tr><td>${thDate(l.d)}</td><td class="name">${esc(l.name)}</td><td><span class="pill ${l.type === 'ลาป่วย' ? 'p-sick' : 'p-vac'}">${esc(l.type)}</span></td><td class="muted">${l.told ? shortDate(l.told) : '–'}</td><td class="muted">${esc(l.note)}</td></tr>`).join('')}</tbody></table>`
+  $('#leaves').innerHTML = lvs.length ? `<table><thead><tr><th>วันที่</th><th>ชื่อ</th><th>ประเภท</th><th>แจ้งหัวหน้า</th><th>อนุมัติ</th><th>หมายเหตุ</th></tr></thead><tbody>${lvs.map(l =>
+    `<tr><td>${thDate(l.d)}</td><td class="name">${esc(l.name)}</td><td><span class="pill ${l.type === 'ลาป่วย' ? 'p-sick' : 'p-vac'}">${esc(l.type)}</span></td><td class="muted">${l.told ? shortDate(l.told) : '–'}</td><td class="muted">${l.approved ? shortDate(l.approved) : 'รออนุมัติ'}</td><td class="muted">${esc(l.note)}</td></tr>`).join('')}</tbody></table>`
     : '<div class="empty">ไม่มีการลาในเดือนนี้</div>';
 }
 

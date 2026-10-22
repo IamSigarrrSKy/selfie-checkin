@@ -120,6 +120,10 @@ button{cursor:pointer}
 .row-del.armed{background:var(--bad);color:#fff}
 .thumb{flex:none;width:52px;height:52px;border-radius:12px;object-fit:cover;background:var(--surface-2)}
 .row-main{flex:1;min-width:0}
+.lv-row{cursor:default;align-items:flex-start}
+.lv-btns{display:flex;flex-direction:column;gap:6px;flex:none}
+.lv-appr{display:flex;gap:8px;margin-top:8px}
+.lv-appr .input{flex:1;min-width:0}
 .row-title{font-weight:600;display:flex;gap:8px;align-items:center}
 .row-sub{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row-time{font-family:var(--mono);font-weight:600;font-size:15px}
@@ -300,7 +304,11 @@ button{cursor:pointer}
         <div class="field"><label for="lv-to">ถึงวันที่</label><input class="input num" type="date" id="lv-to" required></div>
       </div>
       <div class="note">เลือกวันที่ย้อนหลังได้ ถ้าแจ้งหัวหน้าไว้แล้วแต่ลืมลงระบบ</div>
-      <div class="field"><label for="lv-told">แจ้งหัวหน้าเมื่อ</label><input class="input num" type="date" id="lv-told"></div>
+      <div class="grid2">
+        <div class="field"><label for="lv-told">แจ้งหัวหน้าเมื่อ</label><input class="input num" type="date" id="lv-told"></div>
+        <div class="field"><label for="lv-approved">หัวหน้าอนุมัติเมื่อ</label><input class="input num" type="date" id="lv-approved"></div>
+      </div>
+      <div class="note">ยังไม่อนุมัติ เว้นช่องอนุมัติไว้ก่อน กลับมาใส่ทีหลังได้ที่รายการลาด้านล่าง</div>
       <label class="switch" for="lv-skip" style="padding:0">
         <div class="note">ไม่นับวันเสาร์-อาทิตย์</div>
         <input type="checkbox" id="lv-skip" checked>
@@ -949,7 +957,7 @@ function sheetRow(r) {
 }
 
 const pendingCount = () => records.filter(r => !r.synced || r.dirty).length + pendingDeletes.length
-  + leaves.filter(l => !l.synced).length + pendingLeaveDeletes.length;
+  + leaves.filter(l => !l.synced || l.approvedDirty).length + pendingLeaveDeletes.length;
 
 async function syncAll() {
   if (syncing) { syncAgain = true; return; }   // มีรายการใหม่ระหว่างกำลังส่ง: ส่งต่อทันทีเมื่อรอบนี้จบ
@@ -977,7 +985,11 @@ async function syncAll() {
     }
     for (const l of leaves.filter(l => !l.synced)) {
       await postSheet({ action: 'leave_add', leave: leaveRow(l) });
-      l.synced = true; persistLeaves();
+      l.synced = true; l.approvedDirty = false; persistLeaves();
+    }
+    for (const l of leaves.filter(l => l.synced && l.approvedDirty)) {
+      await postSheet({ action: 'leave_update', id: l.id, approved: l.approved || '' });
+      l.approvedDirty = false; persistLeaves();
     }
   } catch (e) { err = e; }
   syncing = false;
@@ -1123,6 +1135,7 @@ function openLeaveForm(type) {
   const t = dayKey(new Date());
   $('#lv-from').value = t; $('#lv-to').value = t; $('#lv-note').value = '';
   $('#lv-told').value = t; $('#lv-told').max = t; toldTouched = false;
+  $('#lv-approved').value = ''; $('#lv-approved').max = t;
   $('#lv-name').value = profile.name || '';
   $('#leave-form').hidden = false; updateLeaveCount();
   $('#leave-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1142,10 +1155,12 @@ function saveLeave() {
   if (!days.length) { toast('เลือกช่วงวันที่ให้ถูกต้อง'); return; }
   const told = $('#lv-told').value;
   if (told > dayKey(new Date())) { $('#lv-told').focus(); toast('วันที่แจ้งหัวหน้าต้องไม่เกินวันนี้'); return; }
+  const approved = $('#lv-approved').value;
+  if (approved > dayKey(new Date())) { $('#lv-approved').focus(); toast('วันที่อนุมัติต้องไม่เกินวันนี้'); return; }
   const dup = days.filter(d => leaves.some(l => (l.name || '') === name && l.days.includes(d)));
   if (dup.length) { toast(`มีการลาวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
   leaves.push({ id: uid(), type: leaveType, from, to, days, note: $('#lv-note').value.trim(),
-    createdAt: Date.now(), name, told });
+    createdAt: Date.now(), name, told, approved });
   persistLeaves();
   $('#leave-form').hidden = true;
   leaveMonth = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1);
@@ -1167,15 +1182,34 @@ function renderLeave() {
   $('#leave-list').innerHTML = list.length ? list.map(l => {
     const n = l.days.filter(inMonth).length;
     const range = l.from === l.to ? fmtDay(l.from) : `${fmtDay(l.from)} – ${fmtDay(l.to)}`;
-    const pend = settings.scriptUrl && !l.synced ? ' <span class="chip">รอส่ง</span>' : '';
-    return `<div class="row">
+    const pend = settings.scriptUrl && (!l.synced || l.approvedDirty) ? ' <span class="chip">รอส่ง</span>' : '';
+    const t = dayKey(new Date());
+    return `<div class="row lv-row">
       <div class="row-main">
         <div class="row-title"><span class="chip ${l.type === 'sick' ? 'sick' : 'vac'}">${LEAVE_TYPES[l.type]}</span> ${range}${pend}</div>
         <div class="row-sub">${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${l.days.length !== n ? ` (ทั้งหมด ${l.days.length} วัน)` : ''}${l.told ? ` · แจ้งหัวหน้า ${fmtDay(l.told)}` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
+        <div class="row-sub">${l.approved ? `อนุมัติ ${fmtDay(l.approved)}` : 'ยังไม่ใส่วันที่อนุมัติ'}</div>
+        <div class="lv-appr" data-lv-appr-box="${l.id}" hidden>
+          <input class="input num" type="date" max="${t}" value="${l.approved || t}" aria-label="วันที่หัวหน้าอนุมัติ">
+          <button class="btn sm primary" data-lv-appr-save="${l.id}">บันทึก</button>
+        </div>
       </div>
-      <button class="btn sm danger" data-lv-del="${l.id}">ยกเลิกการลา</button>
+      <div class="lv-btns">
+        <button class="btn sm" data-lv-appr="${l.id}">${l.approved ? 'แก้วันอนุมัติ' : 'ใส่วันอนุมัติ'}</button>
+        <button class="btn sm danger" data-lv-del="${l.id}">ยกเลิกการลา</button>
+      </div>
     </div>`;
   }).join('') : '<div class="empty"><b>ไม่มีการลาในเดือนนี้</b>กดปุ่มลาป่วยหรือลาพักผ่อนด้านบนเพื่อแจ้งลา</div>';
+}
+
+// ใส่/แก้วันที่หัวหน้าอนุมัติ (ย้อนหลังได้) ส่งไปแก้เฉพาะช่องอนุมัติใน Sheet
+function setLeaveApproval(id, date) {
+  const l = leaves.find(x => x.id === id); if (!l) return;
+  if (!date) { toast('เลือกวันที่อนุมัติ'); return; }
+  if (date > dayKey(new Date())) { toast('วันที่อนุมัติต้องไม่เกินวันนี้'); return; }
+  l.approved = date;
+  if (l.synced) l.approvedDirty = true;
+  persistLeaves(); renderLeave(); toast(`บันทึกวันที่อนุมัติ ${fmtDay(date)} แล้ว`); syncAll();
 }
 
 function deleteLeave(id) {
@@ -1188,7 +1222,7 @@ function deleteLeave(id) {
 function leaveRow(l) {
   const c = new Date(l.createdAt);
   return { id: l.id, type: LEAVE_TYPES[l.type], days: l.days, note: l.note || '', name: l.name || profile.name || '',
-    empId: '', created: `${dayKey(c)} ${hms(c)}`, told: l.told || '' };
+    empId: '', created: `${dayKey(c)} ${hms(c)}`, told: l.told || '', approved: l.approved || '' };
 }
 
 /* ---------- sites ---------- */
@@ -1279,6 +1313,10 @@ $('#leave-form').onsubmit = e => { e.preventDefault(); saveLeave(); };
 $('#lv-prev').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() - 1, 1); renderLeave(); };
 $('#lv-next').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() + 1, 1); renderLeave(); };
 $('#leave-list').onclick = e => {
+  const ap = e.target.closest('[data-lv-appr]');
+  if (ap) { const box = $(`[data-lv-appr-box="${ap.dataset.lvAppr}"]`); box.hidden = !box.hidden; return; }
+  const sv = e.target.closest('[data-lv-appr-save]');
+  if (sv) { setLeaveApproval(sv.dataset.lvApprSave, sv.previousElementSibling.value); return; }
   const b = e.target.closest('[data-lv-del]'); if (!b) return;
   if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อยืนยัน'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ยกเลิกการลา'; }, 3000); return; }
   deleteLeave(b.dataset.lvDel);

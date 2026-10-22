@@ -51,14 +51,17 @@ function doGet() {
 function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
+  let changed = false;
   try {
     const req = JSON.parse(e.postData.contents);
     if (TOKEN && req.token !== TOKEN) return out({ ok: false, error: 'รหัสลับไม่ตรงกัน' });
     const sh = logSheet();
+    changed = ['add', 'update', 'delete', 'leave_add', 'leave_delete', 'leave_update'].indexOf(req.action) >= 0;
 
     if (req.action === 'ping') return out({ ok: true, sheet: sh.getParent().getName() + ' / ' + sh.getName() });
     if (req.action === 'leave_add') return out(addLeave(req.leave));
     if (req.action === 'leave_delete') return out(deleteLeave(req.id));
+    if (req.action === 'leave_update') return out(updateLeaveApproval(req.id, req.approved));
     if (req.action === 'dashboard') return out(dashboardData(req));
 
     if (req.action === 'add') {
@@ -99,8 +102,25 @@ function doPost(e) {
   } catch (err) {
     return out({ ok: false, error: String(err) });
   } finally {
+    if (changed) scheduleSignRefresh();
     lock.releaseLock();
   }
+}
+
+// ใบลงชื่ออัปเดตตามข้อมูลที่แอปส่งมา: นัดสร้างใหม่ในอีก 1 นาที (รายการที่ส่งมาติดกันรวมเป็นรอบเดียว)
+function scheduleSignRefresh() {
+  if (!SIGN_SHEET_ID) return;
+  try {
+    if (ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'refreshSignSheetsSoon')) return;
+    ScriptApp.newTrigger('refreshSignSheetsSoon').timeBased().after(60 * 1000).create();
+  } catch (e) { /* นัดไม่สำเร็จ: ใบลงชื่อยังอัปเดตตามรอบทุกชั่วโมง */ }
+}
+
+function refreshSignSheetsSoon() {
+  // ลบนัดก่อน ข้อมูลที่ส่งมาระหว่างกำลังสร้างจะได้นัดรอบใหม่
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'refreshSignSheetsSoon')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  makeSignSheets();
 }
 
 // วันที่ "2026-10-01" และเวลา "08:30:00" แปลงเป็นตัวเลขวันที่/เวลาของ Sheet เอง ไม่พึ่งการแปลงอัตโนมัติ
@@ -186,8 +206,9 @@ function onSheetEdit(e) {
       if (!v[COL_REGION - 1] || (e.range.getColumn() <= 7 && e.range.getLastColumn() >= 7)) {
         sh.getRange(row, COL_REGION).setValue(regionOf(v[6]));
       }
-    } else if (typeof v[7] === 'string' && v[7]) {
-      sh.getRange(row, 8).setValue(dateSerial(v[7].trim()));   // แจ้งหัวหน้าเมื่อ
+    } else {
+      if (typeof v[7] === 'string' && v[7]) sh.getRange(row, 8).setValue(dateSerial(v[7].trim()));   // แจ้งหัวหน้าเมื่อ
+      if (typeof v[8] === 'string' && v[8]) sh.getRange(row, 9).setValue(dateSerial(v[8].trim()));   // อนุมัติเมื่อ
     }
   });
 }
@@ -499,7 +520,7 @@ function buildRegion(ss, name) {
 }
 
 /* ---------- การลา: หนึ่งแถวต่อหนึ่งวันลา (ID เดียวกันสำหรับการลาครั้งเดียวกัน) ---------- */
-const LEAVE_HEADERS = ['ID', 'วันที่ลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'หมายเหตุ', 'ลงระบบเมื่อ', 'แจ้งหัวหน้าเมื่อ'];
+const LEAVE_HEADERS = ['ID', 'วันที่ลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'หมายเหตุ', 'ลงระบบเมื่อ', 'แจ้งหัวหน้าเมื่อ', 'อนุมัติเมื่อ'];
 
 function leaveSheet() {
   return book().getSheetByName(LEAVE) || buildLeave(book());
@@ -510,9 +531,20 @@ function addLeave(l) {
   if (findRow(sh, l.id)) return { ok: true, duplicate: true };
   const name = String(l.name || '').trim() || 'ไม่ระบุชื่อ';
   const told = l.told ? dateSerial(l.told) : '';   // วันที่แจ้งหัวหน้า (ลงระบบย้อนหลังได้)
-  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, '', l.note, l.created, told]);
+  const approved = l.approved ? dateSerial(l.approved) : '';   // วันที่หัวหน้าอนุมัติ (กรอกทีหลังได้)
+  const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, '', l.note, l.created, told, approved]);
   if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
   return { ok: true };
+}
+
+// ใส่หรือแก้วันที่อนุมัติของการลาครั้งนั้น (ทุกแถวที่ ID เดียวกัน) ช่องอื่นไม่ถูกแตะ
+function updateLeaveApproval(id, approved) {
+  const sh = leaveSheet(), n = sh.getLastRow() - 1;
+  if (n < 1) return { ok: true, missing: true };
+  const ids = sh.getRange(2, 1, n, 1).getValues(), value = approved ? dateSerial(approved) : '';
+  let hit = 0;
+  ids.forEach((v, i) => { if (String(v[0]) === String(id)) { sh.getRange(i + 2, 9).setValue(value); hit++; } });
+  return hit ? { ok: true } : { ok: true, missing: true };
 }
 
 function deleteLeave(id) {
@@ -535,8 +567,8 @@ function buildLeave(ss) {
   sh.getRange(2, 2, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
   sh.getRange(2, 3, rows, 1).setHorizontalAlignment('center');
   sh.getRange(2, 6, rows, 1).setWrap(true);
-  sh.getRange(2, 8, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
-  [70, 140, 100, 160, 110, 260, 150, 140].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  sh.getRange(2, 8, rows, 2).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
+  [70, 140, 100, 160, 110, 260, 150, 140, 140].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(2, 1, rows, n));
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาป่วย')
@@ -645,7 +677,7 @@ function dashboardData(req) {
   lvVals.forEach(v => {
     if (!(v[1] instanceof Date) || !normName(v[3])) return;
     const d = fmt(v[1]);
-    if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: canon(v[3]), note: String(v[5] || ''), told: v[7] instanceof Date ? fmt(v[7]) : '' });
+    if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: canon(v[3]), note: String(v[5] || ''), told: v[7] instanceof Date ? fmt(v[7]) : '', approved: v[8] instanceof Date ? fmt(v[8]) : '' });
   });
   return {
     ok: true, month: ym, today: fmt(new Date()), records: records, leaves: leaves,
