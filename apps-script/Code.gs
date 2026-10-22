@@ -793,6 +793,10 @@ function setupSignSheet() {
   if (ScriptApp.getProjectTriggers().every(t => t.getHandlerFunction() !== 'onSignOpen')) {
     ScriptApp.newTrigger('onSignOpen').forSpreadsheet(ss).onOpen().create();
   }
+  // อัปเดตใบลงชื่อเองทุกชั่วโมง (เดือนที่เลือกในแท็บตั้งค่า) ไม่ต้องกดเมนู
+  if (ScriptApp.getProjectTriggers().every(t => t.getHandlerFunction() !== 'makeSignSheets')) {
+    ScriptApp.newTrigger('makeSignSheets').timeBased().everyHours(1).create();
+  }
 
   // ตั้งค่า: เดือน ปี หัวกระดาษแต่ละภาค ผู้ลงนาม
   const cfg = sheet(ss, SIGN_CFG);
@@ -964,7 +968,7 @@ function makeSignSheets() {
   orderSignTabs(ss);
   say('สร้างใบลงชื่อเดือน ' + TH_MONTHS[month - 1] + ' ' + yearBE + ' แล้ว ' + names.length + ' คน' +
     (fresh.length ? '\nเพิ่มชื่อใหม่ในแท็บรายชื่อ: ' + fresh.join(', ') : '') +
-    '\n\nได้ไฟล์ Excel: เมนู ใบลงชื่อ → ส่งออกเป็น Excel');
+    '\n(ระบบอัปเดตเองทุกชั่วโมงด้วย)\n\nได้ไฟล์ Excel: เมนู ใบลงชื่อ → ส่งออกเป็น Excel');
 }
 
 // หนึ่งแท็บต่อหนึ่งคน หน้าตาเหมือนใบลงชื่อเดิม (ฟอนต์ TH SarabunIT๙ ตอนเปิดใน Excel)
