@@ -17,7 +17,7 @@
   --fg:#14211e; --muted:#5b6d68;
   --accent:#0e5a52; --accent-fg:#ffffff; --accent-soft:#d6ebe6;
   --ok:#1d7a46; --ok-soft:#dcf1e3; --warn:#a15c00; --warn-soft:#fbecd3; --bad:#b4282f; --bad-soft:#fadcdd;
-  --vac:#2a6cb0; --vac-soft:#dce8f6;
+  --vac:#2a6cb0; --vac-soft:#dce8f6; --off:#6b4fb0; --off-soft:#ece6f7;
   --shadow:0 1px 2px rgba(14,40,36,.06),0 6px 20px rgba(14,40,36,.06);
   --font:"IBM Plex Sans Thai",system-ui,"Leelawadee UI","Tahoma",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
@@ -29,7 +29,7 @@
   --fg:#e5efec; --muted:#93a7a1;
   --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34;
   --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c; --bad-soft:#3d1c1e;
-  --vac:#7fb2ea; --vac-soft:#1a2c40;
+  --vac:#7fb2ea; --vac-soft:#1a2c40; --off:#b9a3ec; --off-soft:#2c2440;
   --shadow:0 1px 2px rgba(0,0,0,.3);
   color-scheme:dark;
 }}
@@ -38,7 +38,7 @@
   --fg:#e5efec; --muted:#93a7a1;
   --accent:#5fc4b3; --accent-fg:#06201c; --accent-soft:#173a34;
   --ok:#5fd08e; --ok-soft:#163626; --warn:#f0b35a; --warn-soft:#3a2a12; --bad:#f2878c; --bad-soft:#3d1c1e;
-  --vac:#7fb2ea; --vac-soft:#1a2c40;
+  --vac:#7fb2ea; --vac-soft:#1a2c40; --off:#b9a3ec; --off-soft:#2c2440;
   --shadow:0 1px 2px rgba(0,0,0,.3);
   color-scheme:dark;
 }
@@ -92,6 +92,7 @@ td.c,th.c{text-align:center}
 .p-wait{background:var(--surface-2);color:var(--muted)}
 .p-sick{background:var(--bad-soft);color:var(--bad)}
 .p-vac{background:var(--vac-soft);color:var(--vac)}
+.p-off{background:var(--off-soft);color:var(--off)}
 a{color:var(--accent)}
 .empty{color:var(--muted);text-align:center;padding:28px 8px;font-size:14px}
 
@@ -120,6 +121,7 @@ a{color:var(--accent)}
 .dot.in{background:var(--ok)}
 .dot.sick{background:var(--bad)}
 .dot.vac{background:var(--vac)}
+.dot.off{background:var(--off)}
 .dot.fut{opacity:.35}
 
 .lock{max-width:400px;margin:14vh auto 0}
@@ -181,11 +183,11 @@ a{color:var(--accent)}
   <section class="card">
     <h2>สรุปรายคน <small id="people-note"></small></h2>
     <div class="scroll" id="people"></div>
-    <div class="legend"><span><i style="background:var(--ok)"></i>เช็คอิน</span><span><i style="background:var(--bad)"></i>ลาป่วย</span><span><i style="background:var(--vac)"></i>ลาพักผ่อน</span><span><i style="border:1px dashed var(--line)"></i>เสาร์-อาทิตย์</span></div>
+    <div class="legend"><span><i style="background:var(--ok)"></i>เช็คอิน</span><span><i style="background:var(--bad)"></i>ลาป่วย</span><span><i style="background:var(--vac)"></i>ลาพักผ่อน</span><span><i style="background:var(--off)"></i>ทำงานนอกสถานที่</span><span><i style="border:1px dashed var(--line)"></i>เสาร์-อาทิตย์</span></div>
   </section>
 
   <section class="card">
-    <h2>การลาในเดือนนี้</h2>
+    <h2>การลาและงานนอกสถานที่ในเดือนนี้</h2>
     <div class="scroll" id="leaves"></div>
   </section>
 </div>
@@ -220,10 +222,14 @@ let password = store.get('dash.pw') || '';   // จำรหัสผ่าน�
 const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const monthLabel = ym => { const [y, m] = ym.split('-').map(Number); return `${TH_MONTHS[m - 1]} ${y + 543}`; };
 const thDate = k => { const [y, m, d] = k.split('-').map(Number), dt = new Date(y, m - 1, d); return `วัน${TH_DOW[dt.getDay()]}ที่ ${d} ${TH_MONTHS[m - 1]} ${y + 543}`; };
-// ลาบ่ายนับครึ่งวัน
-const leaveText = l => l.half ? `ลาบ่าย (${l.type})` : l.type;
-const sumW = ls => ls.reduce((n, l) => n + (l.half ? 0.5 : 1), 0);
-const sumT = ts => ts.reduce((n, t) => n + (t.startsWith('ลาบ่าย') ? 0.5 : 1), 0);
+// ลาเช้า/ลาบ่ายนับครึ่งวัน ทำงานนอกสถานที่แสดงแต่ไม่นับเป็นวันลา
+const OFFSITE = 'ทำงานนอกสถานที่';
+const halfOf = l => l.period === 'เช้า' || l.period === 'บ่าย' ? l.period : '';
+const leaveText = l => l.type === OFFSITE ? OFFSITE + (halfOf(l) ? ` (${halfOf(l)})` : '')
+  : halfOf(l) ? `ลา${halfOf(l)} (${l.type})` : l.type;
+const leaveCls = t => t.startsWith(OFFSITE) ? 'off' : t.includes('ลาป่วย') ? 'sick' : 'vac';
+const sumW = ls => ls.filter(l => l.type !== OFFSITE).reduce((n, l) => n + (halfOf(l) ? 0.5 : 1), 0);
+const sumT = ts => ts.reduce((n, t) => n + (/^ลา(เช้า|บ่าย)/.test(t) ? 0.5 : 1), 0);
 const shortDate = k => { const [y, m, d] = k.split('-').map(Number); return `${d} ${TH_MONTHS[m - 1]} ${y + 543}`; };
 const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const fromMin = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(Math.round(n % 60)).padStart(2, '0')}`;
@@ -293,7 +299,7 @@ function summarize() {
   const leaves = {};
   for (const l of data.leaves) {
     const p = people[l.name] || (people[l.name] = { name: l.name, regions: {}, days: {} });
-    (leaves[l.name] || (leaves[l.name] = {}))[l.d] = leaveText(l);
+    { const m = leaves[l.name] || (leaves[l.name] = {}); m[l.d] = m[l.d] ? m[l.d] + ' / ' + leaveText(l) : leaveText(l); }
     p.leave = true;
   }
   for (const p of Object.values(people)) p.region = Object.keys(p.regions).sort((a, b) => p.regions[b] - p.regions[a])[0] || '—';
@@ -332,7 +338,7 @@ function render() {
       .filter(x => x.d || x.lv || isCur)
       .sort((a, b) => (a.d?.in?.t || a.d?.last?.t || '99') < (b.d?.in?.t || b.d?.last?.t || '99') ? -1 : 1);
     $('#today').innerHTML = rows.length ? `<table><thead><tr><th>ชื่อ</th><th>สถานะ</th><th class="c">เข้า</th><th class="c">ออก</th><th>สถานที่ล่าสุด</th><th class="c">รูป</th></tr></thead><tbody>${rows.map(({ p, d, lv }) => {
-      const st = lv ? `<span class="pill ${lv.includes('ลาป่วย') ? 'p-sick' : 'p-vac'}">${esc(lv)}</span>`
+      const st = lv ? `<span class="pill p-${leaveCls(lv)}">${esc(lv)}</span>`
         : d ? `<span class="pill p-ok">${d.out ? 'เช็คเอาท์แล้ว' : 'เช็คอินแล้ว'}</span>` : '<span class="pill p-wait">ยังไม่เช็คอิน</span>';
       const ph = d && (d.last.photo || d.in?.photo);
       return `<tr><td class="name">${esc(p.name)}</td><td>${st}</td><td class="c num">${d?.in ? d.in.t : '–'}</td><td class="c num">${d?.out ? d.out.t : '–'}</td>` +
@@ -386,18 +392,18 @@ function render() {
     const avg = a => a.length ? fromMin(a.reduce((x, y) => x + y, 0) / a.length) : '–';
     const lv = S.leaves[p.name] || {}, lvv = Object.values(lv);
     const dots = keys.map(k => {
-      const cls = lv[k] ? (lv[k].includes('ลาป่วย') ? 'sick' : 'vac') : p.days[k] ? 'in' : isWeekend(k) ? 'we' : '';
+      const cls = lv[k] ? leaveCls(lv[k]) : p.days[k] ? 'in' : isWeekend(k) ? 'we' : '';
       return `<span class="dot ${cls}${k > data.today ? ' fut' : ''}" title="${thDate(k)}${lv[k] ? ' · ' + lv[k] : p.days[k] ? ' · เช็คอิน ' + (p.days[k].in?.t || p.days[k].last.t) : ''}"></span>`;
     }).join('');
     return `<tr><td class="name">${esc(p.name)}</td><td class="muted">${esc(p.region)}</td><td class="c num">${ds.length}</td><td class="c num">${avg(ins)}</td><td class="c num">${avg(outs)}</td>` +
-      `<td class="c num">${sumT(lvv.filter(t => t.includes('ลาป่วย'))) || '–'}</td><td class="c num">${sumT(lvv.filter(t => !t.includes('ลาป่วย'))) || '–'}</td><td><div class="dots">${dots}</div></td></tr>`;
+      `<td class="c num">${sumT(lvv.filter(t => !t.startsWith(OFFSITE) && t.includes('ลาป่วย'))) || '–'}</td><td class="c num">${sumT(lvv.filter(t => !t.startsWith(OFFSITE) && t.includes('ลาพักผ่อน'))) || '–'}</td><td><div class="dots">${dots}</div></td></tr>`;
   }).join('')}</tbody></table>` : '<div class="empty">ไม่มีข้อมูลในเดือนนี้</div>';
 
   // การลา
   const lvs = data.leaves.slice().sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.name.localeCompare(b.name, 'th'));
   $('#leaves').innerHTML = lvs.length ? `<table><thead><tr><th>วันที่</th><th>ชื่อ</th><th>ประเภท</th><th>แจ้งหัวหน้า</th><th>อนุมัติ</th><th>หมายเหตุ</th></tr></thead><tbody>${lvs.map(l =>
-    `<tr><td>${thDate(l.d)}</td><td class="name">${esc(l.name)}</td><td><span class="pill ${l.type === 'ลาป่วย' ? 'p-sick' : 'p-vac'}">${esc(leaveText(l))}</span></td><td class="muted">${l.told ? shortDate(l.told) : '–'}</td><td class="muted">${l.approved ? shortDate(l.approved) : 'รออนุมัติ'}</td><td class="muted">${esc(l.note)}</td></tr>`).join('')}</tbody></table>`
-    : '<div class="empty">ไม่มีการลาในเดือนนี้</div>';
+    `<tr><td>${thDate(l.d)}</td><td class="name">${esc(l.name)}</td><td><span class="pill p-${leaveCls(leaveText(l))}">${esc(leaveText(l))}</span></td><td class="muted">${l.told ? shortDate(l.told) : '–'}</td><td class="muted">${l.type === OFFSITE ? '–' : l.approved ? shortDate(l.approved) : 'รออนุมัติ'}</td><td class="muted">${esc(l.note)}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="empty">ไม่มีการลาหรืองานนอกสถานที่ในเดือนนี้</div>';
 }
 
 $('#prev').onclick = () => { month = ymAdd(month, -1); load(); };

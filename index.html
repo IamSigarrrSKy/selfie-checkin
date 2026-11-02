@@ -102,8 +102,12 @@ button{cursor:pointer}
 .leave-btn span{font-size:12.5px;color:var(--muted)}
 .leave-btn.sick b{color:var(--bad)}
 .leave-btn.vac b{color:var(--accent)}
-.leave-btn.pm{grid-column:1/-1}
-.leave-btn.pm b{color:var(--warn)}
+.leave-btn.half b{color:var(--warn)}
+.leave-btn.off{grid-column:1/-1}
+.leave-btn.off b{color:#6b4fb0}
+.chip.off{background:#ece6f7;color:#6b4fb0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip.off{background:#2c2440;color:#b9a3ec}}
+:root[data-theme="dark"] .chip.off{background:#2c2440;color:#b9a3ec}
 .lv-type{display:flex;gap:8px}
 .lv-type .btn{flex:1}
 .lv-type .btn.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
@@ -292,40 +296,46 @@ button{cursor:pointer}
   <section class="page" id="pg-leave" hidden>
     <div class="top">
       <div><div class="clock" style="font-family:var(--font);font-size:26px">การลา</div>
-      <div class="date">แจ้งลาป่วยหรือลาพักผ่อน ระบบนับวันแยกเป็นรายเดือน</div></div>
+      <div class="date">แจ้งลาป่วย ลาพักผ่อน ลาครึ่งวัน และทำงานนอกสถานที่ ระบบนับวันแยกเป็นรายเดือน</div></div>
     </div>
     <div class="leave-actions">
       <button class="leave-btn sick" data-leave="sick"><b>ลาป่วย</b><span>แจ้งวันที่ป่วย</span></button>
       <button class="leave-btn vac" data-leave="vacation"><b>ลาพักผ่อน</b><span>แจ้งวันหยุดพักผ่อน</span></button>
-      <button class="leave-btn pm" data-leave="pm"><b>ลาบ่าย</b><span>ลาครึ่งวันช่วงบ่าย นับ 0.5 วัน (ลงย้อนหลังได้)</span></button>
+      <button class="leave-btn half" data-leave="am"><b>ลาเช้า</b><span>ลาครึ่งวันช่วงเช้า นับ 0.5 วัน</span></button>
+      <button class="leave-btn half" data-leave="pm"><b>ลาบ่าย</b><span>ลาครึ่งวันช่วงบ่าย นับ 0.5 วัน</span></button>
+      <button class="leave-btn off" data-leave="offsite"><b>ทำงานนอกสถานที่</b><span>เช่น ไปเป็นวิทยากร ไปประชุม เลือกวันและพิมพ์ว่าไปที่ไหน (ไม่นับเป็นวันลา)</span></button>
     </div>
 
     <form class="card form" id="leave-form" hidden autocomplete="off">
       <div class="sec-title" id="leave-form-title" style="margin:0">ลาป่วย</div>
-      <div class="lv-type" role="group" aria-label="ประเภทการลา">
+      <div class="lv-type lv-leave-only" role="group" aria-label="ประเภทการลา">
         <button type="button" class="btn sm" data-lv-type="sick">ลาป่วย</button>
         <button type="button" class="btn sm" data-lv-type="vacation">ลาพักผ่อน</button>
       </div>
-      <div class="field"><label for="lv-name">ชื่อผู้ลา</label><input class="input" id="lv-name" required placeholder="ชื่อ–นามสกุล"></div>
+      <div class="field"><label for="lv-name" id="lv-name-label">ชื่อผู้ลา</label><input class="input" id="lv-name" required placeholder="ชื่อ–นามสกุล"></div>
       <div class="grid2">
         <div class="field"><label for="lv-from">ตั้งแต่วันที่</label><input class="input num" type="date" id="lv-from" required></div>
         <div class="field"><label for="lv-to">ถึงวันที่</label><input class="input num" type="date" id="lv-to" required></div>
       </div>
       <div class="note">เลือกวันที่ย้อนหลังได้ ถ้าแจ้งหัวหน้าไว้แล้วแต่ลืมลงระบบ</div>
-      <label class="switch" for="lv-pm" style="padding:0">
-        <div><b>ลาบ่าย</b> <span class="note">ลาครึ่งวันช่วงบ่าย (วันเดียว นับ 0.5 วัน)</span></div>
-        <input type="checkbox" id="lv-pm">
-      </label>
-      <div class="grid2">
+      <div class="field">
+        <label>ช่วงเวลา</label>
+        <div class="lv-type" role="group" aria-label="ช่วงเวลา">
+          <button type="button" class="btn sm" data-lv-period="">ทั้งวัน</button>
+          <button type="button" class="btn sm" data-lv-period="am">ครึ่งเช้า</button>
+          <button type="button" class="btn sm" data-lv-period="pm">ครึ่งบ่าย</button>
+        </div>
+      </div>
+      <div class="grid2 lv-leave-only">
         <div class="field"><label for="lv-told">แจ้งหัวหน้าเมื่อ</label><input class="input num" type="date" id="lv-told"></div>
         <div class="field"><label for="lv-approved">หัวหน้าอนุมัติเมื่อ</label><input class="input num" type="date" id="lv-approved"></div>
       </div>
-      <div class="note">ยังไม่อนุมัติ เว้นช่องอนุมัติไว้ก่อน กลับมาใส่ทีหลังได้ โดยกด "แก้ไข" ที่รายการลาด้านล่าง</div>
+      <div class="note lv-leave-only">ยังไม่อนุมัติ เว้นช่องอนุมัติไว้ก่อน กลับมาใส่ทีหลังได้ โดยกด "แก้ไข" ที่รายการลาด้านล่าง</div>
       <label class="switch" for="lv-skip" style="padding:0">
         <div class="note">ไม่นับวันเสาร์-อาทิตย์</div>
         <input type="checkbox" id="lv-skip" checked>
       </label>
-      <div class="field"><label for="lv-note">หมายเหตุ</label><textarea class="input" id="lv-note" rows="2" placeholder="เช่น ไข้หวัด, ไปต่างจังหวัด"></textarea></div>
+      <div class="field"><label for="lv-note" id="lv-note-label">หมายเหตุ</label><textarea class="input" id="lv-note" rows="2" placeholder="เช่น ไข้หวัด, ไปต่างจังหวัด"></textarea></div>
       <div class="note" id="lv-count"></div>
       <div class="btns"><button type="button" class="btn" id="lv-cancel">ยกเลิก</button><span style="flex:1"></span><button type="submit" class="btn primary" id="lv-save">บันทึกการลา</button></div>
     </form>
@@ -768,7 +778,7 @@ function renderToday() {
   const t = todayRecords();
   const lt = leaves.find(l => l.days.includes(dayKey(new Date())));
   $('#leave-chip').hidden = !lt;
-  if (lt) { $('#leave-chip').textContent = `วันนี้${leaveLabel(lt)}`; $('#leave-chip').className = `chip ${lt.type === 'sick' ? 'sick' : 'vac'}`; }
+  if (lt) { $('#leave-chip').textContent = `วันนี้${leaveLabel(lt)}`; $('#leave-chip').className = `chip ${leaveChip(lt)}`; }
   $('#t-count').textContent = t.length ? `${t.length} ครั้ง` : '–';
   const fin = t.find(r => r.type !== 'checkout' && r.type !== 'out');
   const lout = [...t].reverse().find(r => r.type === 'checkout' || r.type === 'out');
@@ -1132,15 +1142,19 @@ function exportCSV() {
 }
 
 /* ---------- การลา (ลาป่วย / ลาพักผ่อน) ---------- */
-const LEAVE_TYPES = { sick: 'ลาป่วย', vacation: 'ลาพักผ่อน' };
+const LEAVE_TYPES = { sick: 'ลาป่วย', vacation: 'ลาพักผ่อน', offsite: 'ทำงานนอกสถานที่' };
+const PERIODS = { am: 'เช้า', pm: 'บ่าย' };   // ครึ่งวัน (ว่าง = ทั้งวัน)
 const thMonth = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' });
 const thDayShort = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short' });
 const fmtDay = k => thDayShort.format(new Date(k + 'T00:00:00'));
-let leaveType = 'sick', toldTouched = false, editingLeaveId = null;
+let leaveType = 'sick', leavePeriod = '', toldTouched = false, editingLeaveId = null;
 let leaveMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
 const persistLeaves = () => store.set('ci.leaves', leaves);
-const leaveWeight = l => l.period === 'pm' ? 0.5 : 1;   // ลาบ่าย = ครึ่งวัน
-const leaveLabel = l => l.period === 'pm' ? `ลาบ่าย (${LEAVE_TYPES[l.type]})` : LEAVE_TYPES[l.type];
+const isOffsite = l => l.type === 'offsite';
+const leaveWeight = l => PERIODS[l.period] ? 0.5 : 1;   // ลาเช้า/ลาบ่าย = ครึ่งวัน
+const leaveLabel = l => isOffsite(l) ? LEAVE_TYPES.offsite + (PERIODS[l.period] ? ` (${PERIODS[l.period]})` : '')
+  : PERIODS[l.period] ? `ลา${PERIODS[l.period]} (${LEAVE_TYPES[l.type]})` : LEAVE_TYPES[l.type];
+const leaveChip = l => isOffsite(l) ? 'off' : l.type === 'sick' ? 'sick' : 'vac';
 
 // วันลาทั้งหมดในช่วง (เป็น "YYYY-MM-DD") ตัดเสาร์-อาทิตย์ได้
 function leaveDays(from, to, skipWeekend) {
@@ -1154,59 +1168,75 @@ function leaveDays(from, to, skipWeekend) {
   return out;
 }
 
-// เปิดฟอร์มแจ้งลาใหม่ หรือแก้การลาเดิม (ส่ง l มา)
+// เปิดฟอร์มแจ้งใหม่ (type: sick / vacation / am / pm / offsite) หรือแก้รายการเดิม (ส่ง l มา)
 function openLeaveForm(type, l) {
-  const pmButton = type === 'pm';   // ปุ่มลาบ่าย: เริ่มเป็นลาป่วยครึ่งวันบ่าย เปลี่ยนประเภทได้ในฟอร์ม
   editingLeaveId = l ? l.id : null;
-  setLeaveType(l ? l.type : pmButton ? 'sick' : type);
+  setLeaveType(l ? l.type : PERIODS[type] ? 'sick' : type);
+  setLeavePeriod(l ? l.period || '' : PERIODS[type] ? type : '');
   const t = dayKey(new Date());
   $('#lv-from').value = l ? l.from : t; $('#lv-to').value = l ? l.to : t;
   $('#lv-note').value = l ? l.note || '' : '';
   $('#lv-told').value = l ? l.told || '' : t; $('#lv-told').max = t; toldTouched = !!l;
   $('#lv-approved').value = l ? l.approved || '' : ''; $('#lv-approved').max = t;
-  $('#lv-pm').checked = l ? l.period === 'pm' : pmButton;
   $('#lv-skip').checked = l ? !l.days.some(d => [0, 6].includes(new Date(d + 'T00:00:00').getDay())) : true;
   $('#lv-name').value = l ? l.name || '' : profile.name || '';
-  $('#lv-save').textContent = l ? 'บันทึกการแก้ไข' : 'บันทึกการลา';
-  syncPmField();
+  $('#lv-save').textContent = l ? 'บันทึกการแก้ไข' : 'บันทึก';
   $('#leave-form').hidden = false; updateLeaveCount();
   $('#leave-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// ทำงานนอกสถานที่: ไม่มีประเภทลาและวันอนุมัติ หมายเหตุ (ไปที่ไหน) ต้องกรอก
 function setLeaveType(type) {
   leaveType = type;
-  $('#leave-form-title').textContent = (editingLeaveId ? 'แก้ไข' : 'แจ้ง') + LEAVE_TYPES[type];
+  const off = type === 'offsite';
+  $('#leave-form-title').textContent = (editingLeaveId ? 'แก้ไข' : off ? '' : 'แจ้ง') + LEAVE_TYPES[type];
   document.querySelectorAll('[data-lv-type]').forEach(b => b.classList.toggle('on', b.dataset.lvType === type));
+  document.querySelectorAll('.lv-leave-only').forEach(el => { el.hidden = off; });
+  $('#lv-name-label').textContent = off ? 'ชื่อ' : 'ชื่อผู้ลา';
+  $('#lv-note-label').textContent = off ? 'ไปที่ไหน / ทำอะไร (ขึ้นในหมายเหตุของใบลงชื่อ)' : 'หมายเหตุ';
+  $('#lv-note').placeholder = off ? 'เช่น วิทยากรอบรมความปลอดภัยทางรังสี ม.ขอนแก่น' : 'เช่น ไข้หวัด, ไปต่างจังหวัด';
+  $('#lv-note').required = off;
 }
 
-// ลาบ่ายลาได้ทีละวัน: ล็อกวันที่สิ้นสุดให้เท่ากับวันเริ่ม
-function syncPmField() {
-  const pm = $('#lv-pm').checked;
-  if (pm) $('#lv-to').value = $('#lv-from').value;
-  $('#lv-to').disabled = pm;
+// ครึ่งวันลาได้ทีละวัน: ล็อกวันที่สิ้นสุดให้เท่ากับวันเริ่ม
+function setLeavePeriod(p) {
+  leavePeriod = p;
+  document.querySelectorAll('[data-lv-period]').forEach(b => b.classList.toggle('on', b.dataset.lvPeriod === p));
+  if (p) $('#lv-to').value = $('#lv-from').value;
+  $('#lv-to').disabled = !!p;
+  updateLeaveCount();
 }
 
 function updateLeaveCount() {
   const n = leaveDays($('#lv-from').value, $('#lv-to').value, $('#lv-skip').checked).length;
+  const half = PERIODS[leavePeriod];
   $('#lv-count').textContent = !n ? 'ช่วงวันที่ไม่ถูกต้อง หรือไม่มีวันทำงานในช่วงนี้'
-    : $('#lv-pm').checked ? 'ลาบ่าย ครึ่งวัน (0.5 วัน)' : `รวม ${n} วัน`;
+    : leaveType === 'offsite' ? `${n} วัน${half ? ` (ครึ่ง${half})` : ''} ไม่นับเป็นวันลา`
+    : half ? `ลา${half} ครึ่งวัน (0.5 วัน)` : `รวม ${n} วัน`;
 }
 
+// วันเดียวกันซ้ำกันไม่ได้ ยกเว้นครึ่งเช้ากับครึ่งบ่ายคนละรายการ
+const overlaps = (a, b) => !(a && b && a !== b);
+
 function saveLeave() {
-  const pm = $('#lv-pm').checked;
-  const from = $('#lv-from').value, to = pm ? from : $('#lv-to').value;
+  const p = leavePeriod;
+  const from = $('#lv-from').value, to = p ? from : $('#lv-to').value;
   const days = leaveDays(from, to, $('#lv-skip').checked);
   const name = $('#lv-name').value.trim();
-  if (!name) { $('#lv-name').focus(); toast('กรอกชื่อผู้ลา'); return; }
+  const note = $('#lv-note').value.trim();
+  if (!name) { $('#lv-name').focus(); toast('กรอกชื่อ'); return; }
   if (!profile.name) { profile.name = name; store.set('ci.profile', profile); renderHello(); }
   if (!days.length) { toast('เลือกช่วงวันที่ให้ถูกต้อง'); return; }
-  const told = $('#lv-told').value;
+  if (leaveType === 'offsite' && !note) { $('#lv-note').focus(); toast('พิมพ์ว่าไปที่ไหน / ทำอะไร'); return; }
+  const off = leaveType === 'offsite';
+  const told = off ? '' : $('#lv-told').value;
   if (told > dayKey(new Date())) { $('#lv-told').focus(); toast('วันที่แจ้งหัวหน้าต้องไม่เกินวันนี้'); return; }
-  const approved = $('#lv-approved').value;
+  const approved = off ? '' : $('#lv-approved').value;
   if (approved > dayKey(new Date())) { $('#lv-approved').focus(); toast('วันที่อนุมัติต้องไม่เกินวันนี้'); return; }
-  const dup = days.filter(d => leaves.some(l => l.id !== editingLeaveId && (l.name || '') === name && l.days.includes(d)));
-  if (dup.length) { toast(`มีการลาวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
-  const data = { type: leaveType, from, to, days, note: $('#lv-note').value.trim(), name, told, approved, period: pm ? 'pm' : '' };
+  const dup = days.filter(d => leaves.some(l => l.id !== editingLeaveId && (l.name || '') === name &&
+    l.days.includes(d) && overlaps(l.period || '', p)));
+  if (dup.length) { toast(`มีรายการวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
+  const data = { type: leaveType, from, to, days, note, name, told, approved, period: p };
   const old = editingLeaveId && leaves.find(l => l.id === editingLeaveId);
   if (old) {
     Object.assign(old, data);
@@ -1218,7 +1248,7 @@ function saveLeave() {
   $('#leave-form').hidden = true;
   leaveMonth = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1);
   renderLeave(); renderToday();
-  toast(old ? 'บันทึกการแก้ไขแล้ว' : `บันทึก${pm ? 'ลาบ่าย' : LEAVE_TYPES[leaveType] + ' ' + days.length + ' วัน'}แล้ว`);
+  toast(old ? 'บันทึกการแก้ไขแล้ว' : `บันทึก${leaveLabel(data)}${p ? '' : ' ' + days.length + ' วัน'}แล้ว`);
   editingLeaveId = null;
   syncAll();
 }
@@ -1238,32 +1268,35 @@ function renderLeave() {
     const range = l.from === l.to ? fmtDay(l.from) : `${fmtDay(l.from)} – ${fmtDay(l.to)}`;
     const pend = settings.scriptUrl && (!l.synced || l.dirty || l.approvedDirty) ? ' <span class="chip">รอส่ง</span>' : '';
     const total = l.days.length * leaveWeight(l);
+    const sub = isOffsite(l)
+      ? `${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${total !== n ? ` (ทั้งหมด ${total} วัน)` : ''}${l.note ? ' · ' + esc(l.note) : ''}`
+      : `${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${total !== n ? ` (ทั้งหมด ${total} วัน)` : ''}${l.told ? ` · แจ้งหัวหน้า ${fmtDay(l.told)}` : ''}${l.note ? ' · ' + esc(l.note) : ''}`;
     return `<div class="row lv-row">
       <div class="row-main">
-        <div class="row-title"><span class="chip ${l.type === 'sick' ? 'sick' : 'vac'}">${leaveLabel(l)}</span> ${range}${pend}</div>
-        <div class="row-sub">${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${total !== n ? ` (ทั้งหมด ${total} วัน)` : ''}${l.told ? ` · แจ้งหัวหน้า ${fmtDay(l.told)}` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
-        <div class="row-sub">${l.approved ? `อนุมัติ ${fmtDay(l.approved)}` : 'ยังไม่ใส่วันที่อนุมัติ'}</div>
+        <div class="row-title"><span class="chip ${leaveChip(l)}">${leaveLabel(l)}</span> ${range}${pend}</div>
+        <div class="row-sub">${sub}</div>
+        ${isOffsite(l) ? '' : `<div class="row-sub">${l.approved ? `อนุมัติ ${fmtDay(l.approved)}` : 'ยังไม่ใส่วันที่อนุมัติ'}</div>`}
       </div>
       <div class="lv-btns">
         <button class="btn sm" data-lv-edit="${l.id}">แก้ไข</button>
-        <button class="btn sm danger" data-lv-del="${l.id}">ยกเลิกการลา</button>
+        <button class="btn sm danger" data-lv-del="${l.id}">${isOffsite(l) ? 'ลบรายการ' : 'ยกเลิกการลา'}</button>
       </div>
     </div>`;
-  }).join('') : '<div class="empty"><b>ไม่มีการลาในเดือนนี้</b>กดปุ่มลาป่วยหรือลาพักผ่อนด้านบนเพื่อแจ้งลา</div>';
+  }).join('') : '<div class="empty"><b>ไม่มีรายการในเดือนนี้</b>กดปุ่มด้านบนเพื่อแจ้งลา หรือแจ้งทำงานนอกสถานที่</div>';
 }
 
 function deleteLeave(id) {
   const l = leaves.find(x => x.id === id); if (!l) return;
   leaves = leaves.filter(x => x.id !== id); persistLeaves();
   if (l.synced) { pendingLeaveDeletes.push(id); store.set('ci.pendingLeaveDeletes', pendingLeaveDeletes); }
-  renderLeave(); renderToday(); toast('ยกเลิกการลาแล้ว'); syncAll();
+  renderLeave(); renderToday(); toast(isOffsite(l) ? 'ลบรายการแล้ว' : 'ยกเลิกการลาแล้ว'); syncAll();
 }
 
 function leaveRow(l) {
   const c = new Date(l.createdAt);
   return { id: l.id, type: LEAVE_TYPES[l.type], days: l.days, note: l.note || '', name: l.name || profile.name || '',
     empId: '', created: `${dayKey(c)} ${hms(c)}`, told: l.told || '', approved: l.approved || '',
-    period: l.period === 'pm' ? 'บ่าย' : 'ทั้งวัน' };
+    period: PERIODS[l.period] || 'ทั้งวัน' };
 }
 
 /* ---------- sites ---------- */
@@ -1344,13 +1377,13 @@ $('#lv-from').onchange = () => {
   if ($('#lv-to').value < $('#lv-from').value) $('#lv-to').value = $('#lv-from').value;
   // ลาย้อนหลัง: ตั้งวันที่แจ้งหัวหน้าเป็นวันเริ่มลาไว้ก่อน (แก้เองได้)
   if (!toldTouched) { const t = dayKey(new Date()), f = $('#lv-from').value; $('#lv-told').value = f && f < t ? f : t; }
-  syncPmField(); updateLeaveCount();
+  setLeavePeriod(leavePeriod);
 };
 $('#lv-told').onchange = () => { toldTouched = true; };
 $('#lv-to').onchange = updateLeaveCount;
 $('#lv-skip').onchange = updateLeaveCount;
-$('#lv-pm').onchange = () => { syncPmField(); updateLeaveCount(); };
 document.querySelectorAll('[data-lv-type]').forEach(b => b.onclick = () => setLeaveType(b.dataset.lvType));
+document.querySelectorAll('[data-lv-period]').forEach(b => b.onclick = () => setLeavePeriod(b.dataset.lvPeriod));
 $('#lv-cancel').onclick = () => { $('#leave-form').hidden = true; editingLeaveId = null; };
 $('#leave-form').onsubmit = e => { e.preventDefault(); saveLeave(); };
 $('#lv-prev').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() - 1, 1); renderLeave(); };

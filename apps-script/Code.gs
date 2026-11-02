@@ -521,7 +521,8 @@ function buildRegion(ss, name) {
 }
 
 /* ---------- การลา: หนึ่งแถวต่อหนึ่งวันลา (ID เดียวกันสำหรับการลาครั้งเดียวกัน) ---------- */
-const LEAVE_HEADERS = ['ID', 'วันที่ลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'หมายเหตุ', 'ลงระบบเมื่อ', 'แจ้งหัวหน้าเมื่อ', 'อนุมัติเมื่อ', 'ช่วง'];
+const OFFSITE = 'ทำงานนอกสถานที่';   // แจ้งในแท็บลาของแอป แต่ไม่นับเป็นวันลา
+const LEAVE_HEADERS =['ID', 'วันที่ลา', 'ประเภท', 'ชื่อ', 'รหัสพนักงาน', 'หมายเหตุ', 'ลงระบบเมื่อ', 'แจ้งหัวหน้าเมื่อ', 'อนุมัติเมื่อ', 'ช่วง'];
 
 function leaveSheet() {
   return book().getSheetByName(LEAVE) || buildLeave(book());
@@ -533,7 +534,7 @@ function addLeave(l) {
   const name = String(l.name || '').trim() || 'ไม่ระบุชื่อ';
   const told = l.told ? dateSerial(l.told) : '';   // วันที่แจ้งหัวหน้า (ลงระบบย้อนหลังได้)
   const approved = l.approved ? dateSerial(l.approved) : '';   // วันที่หัวหน้าอนุมัติ (กรอกทีหลังได้)
-  const period = l.period === 'บ่าย' ? 'บ่าย' : 'ทั้งวัน';   // ลาบ่าย = ครึ่งวัน
+  const period = ['เช้า', 'บ่าย'].indexOf(l.period) >= 0 ? l.period : 'ทั้งวัน';   // ลาเช้า/ลาบ่าย = ครึ่งวัน
   const rows = l.days.map(d => [l.id, dateSerial(d), l.type, name, '', l.note, l.created, told, approved, period]);
   if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
   return { ok: true };
@@ -577,7 +578,9 @@ function buildLeave(ss) {
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาป่วย')
       .setFontColor('#b4282f').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาพักผ่อน')
-      .setFontColor('#0e5a52').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build()
+      .setFontColor('#0e5a52').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(OFFSITE)
+      .setFontColor('#6b4fb0').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build()
   ]);
   return sh;
 }
@@ -595,7 +598,7 @@ function buildLeaveSummary(ss) {
   sh.getRange('A1').setValue('สรุปการลารายเดือน').setFontSize(16).setFontWeight('bold').setFontColor(C.title);
   sh.setRowHeight(1, 34);
   // ลาบ่ายนับครึ่งวัน: นับทุกแถว แล้วหักครึ่งหนึ่งของแถวที่ช่วง = บ่าย
-  const half = (c) => '(COUNTIFS(' + c + ')-0.5*COUNTIFS(' + c + ',' + V + 'J2:J,"บ่าย"))';
+  const half = (c) => '(COUNTIFS(' + c + ')-0.5*COUNTIFS(' + c + ',' + V + 'J2:J,"บ่าย")-0.5*COUNTIFS(' + c + ',' + V + 'J2:J,"เช้า"))';
   const yr = (type) => half(V + 'B2:B,">="&DATE(YEAR(TODAY()),1,1),' + V + 'B2:B,"<="&DATE(YEAR(TODAY()),12,31),' + V + 'C2:C,"' + type + '"');
   sh.getRange('A2').setFormula('="ปีนี้ทุกคน · ลาป่วย "&' + yr('ลาป่วย') + '&" วัน · ลาพักผ่อน "&' + yr('ลาพักผ่อน') + '&" วัน"')
     .setFontColor(C.muted);
@@ -604,11 +607,11 @@ function buildLeaveSummary(ss) {
   styleHeader(sh, 4, head.length);
 
   // แถวละหนึ่งคนต่อหนึ่งเดือน เรียงเดือนล่าสุดก่อน แล้วเรียงตามชื่อ
-  sh.getRange('A5').setFormula('=IFERROR(SORT(UNIQUE(FILTER({ARRAYFORMULA(EOMONTH(' + V + 'B2:B,-1)+1),' + V + 'D2:D},' + V + 'B2:B<>"")),1,FALSE,2,TRUE),)');
+  sh.getRange('A5').setFormula('=IFERROR(SORT(UNIQUE(FILTER({ARRAYFORMULA(EOMONTH(' + V + 'B2:B,-1)+1),' + V + 'D2:D},' + V + 'B2:B<>"",' + V + 'C2:C<>"' + OFFSITE + '")),1,FALSE,2,TRUE),)');   // งานนอกสถานที่ไม่นับเป็นการลา
   const cnt = (type) => half(V + 'B2:B,">="&m,' + V + 'B2:B,"<="&EOMONTH(m,0),' + V + 'D2:D,n,' + V + 'C2:C,"' + type + '"');
   // วันที่ลาเรียงตามวัน วันที่ลาบ่ายมีคำว่า "บ่าย" ต่อท้าย
   const days = (type) => 'IFERROR("' + type.replace('ลา', '') + ' "&TEXTJOIN(", ",TRUE,INDEX(SORT(FILTER({' + V + 'B2:B,ARRAYFORMULA(TEXT(' +
-    V + 'B2:B,"d")&IF(' + V + 'J2:J="บ่าย"," บ่าย",""))},' + V + 'B2:B>=m,' + V + 'B2:B<=EOMONTH(m,0),' + V + 'D2:D=n,' + V + 'C2:C="' + type + '"),1,TRUE),0,2)),"")';
+    V + 'B2:B,"d")&IF(' + V + 'J2:J="บ่าย"," บ่าย",IF(' + V + 'J2:J="เช้า"," เช้า","")))},' + V + 'B2:B>=m,' + V + 'B2:B<=EOMONTH(m,0),' + V + 'D2:D=n,' + V + 'C2:C="' + type + '"),1,TRUE),0,2)),"")';
   sh.getRange('C5').setFormula('=MAP(A5:A,B5:B,LAMBDA(m,n,IF(m="",,' + cnt('ลาป่วย') + ')))');
   sh.getRange('D5').setFormula('=MAP(A5:A,B5:B,LAMBDA(m,n,IF(m="",,' + cnt('ลาพักผ่อน') + ')))');
   sh.getRange('E5').setFormula('=MAP(C5:C,D5:D,LAMBDA(s,v,IF(AND(s="",v=""),,s+v)))');
@@ -683,7 +686,7 @@ function dashboardData(req) {
   lvVals.forEach(v => {
     if (!(v[1] instanceof Date) || !normName(v[3])) return;
     const d = fmt(v[1]);
-    if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: canon(v[3]), note: String(v[5] || ''), told: v[7] instanceof Date ? fmt(v[7]) : '', approved: v[8] instanceof Date ? fmt(v[8]) : '', half: v[9] === 'บ่าย' });
+    if (d.slice(0, 7) === ym) leaves.push({ d: d, type: String(v[2]), name: canon(v[3]), note: String(v[5] || ''), told: v[7] instanceof Date ? fmt(v[7]) : '', approved: v[8] instanceof Date ? fmt(v[8]) : '', period: String(v[9] || '') });
   });
   return {
     ok: true, month: ym, today: fmt(new Date()), records: records, leaves: leaves,
@@ -1009,7 +1012,13 @@ function makeSignSheets() {
     if (!name || !(v[1] instanceof Date)) return;
     const key = keyOf(v[1]);
     // หมายเหตุในใบลงชื่อ: ลาบ่ายเขียนว่า "ลาบ่าย" (ตามด้วยประเภทการลา)
-    if (key.slice(0, 7) === ym) person(name).leaves[key] = v[9] === 'บ่าย' ? 'ลาบ่าย (' + v[2] + ')' : v[2];
+    if (key.slice(0, 7) !== ym) return;
+    // หมายเหตุในใบลงชื่อ: "ลาเช้า (ลาป่วย)", "ทำงานนอกสถานที่: ไปที่ไหน"
+    const half = v[9] === 'เช้า' || v[9] === 'บ่าย' ? v[9] : '';
+    const text = v[2] === OFFSITE ? OFFSITE + (half ? ' (' + half + ')' : '') + (v[5] ? ': ' + v[5] : '')
+      : half ? 'ลา' + half + ' (' + v[2] + ')' : v[2];
+    const lv = person(name).leaves;
+    lv[key] = lv[key] ? lv[key] + ' / ' + text : text;   // เช้ากับบ่ายคนละรายการในวันเดียวกัน
   });
   const holidays = {};
   const hd = ss.getSheetByName(SIGN_HOLIDAYS);
