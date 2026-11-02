@@ -122,8 +122,6 @@ button{cursor:pointer}
 .row-main{flex:1;min-width:0}
 .lv-row{cursor:default;align-items:flex-start}
 .lv-btns{display:flex;flex-direction:column;gap:6px;flex:none}
-.lv-appr{display:flex;gap:8px;margin-top:8px}
-.lv-appr .input{flex:1;min-width:0}
 .row-title{font-weight:600;display:flex;gap:8px;align-items:center}
 .row-sub{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row-time{font-family:var(--mono);font-weight:600;font-size:15px}
@@ -304,11 +302,15 @@ button{cursor:pointer}
         <div class="field"><label for="lv-to">ถึงวันที่</label><input class="input num" type="date" id="lv-to" required></div>
       </div>
       <div class="note">เลือกวันที่ย้อนหลังได้ ถ้าแจ้งหัวหน้าไว้แล้วแต่ลืมลงระบบ</div>
+      <label class="switch" for="lv-pm" style="padding:0">
+        <div><b>ลาบ่าย</b> <span class="note">ลาครึ่งวันช่วงบ่าย (วันเดียว นับ 0.5 วัน)</span></div>
+        <input type="checkbox" id="lv-pm">
+      </label>
       <div class="grid2">
         <div class="field"><label for="lv-told">แจ้งหัวหน้าเมื่อ</label><input class="input num" type="date" id="lv-told"></div>
         <div class="field"><label for="lv-approved">หัวหน้าอนุมัติเมื่อ</label><input class="input num" type="date" id="lv-approved"></div>
       </div>
-      <div class="note">ยังไม่อนุมัติ เว้นช่องอนุมัติไว้ก่อน กลับมาใส่ทีหลังได้ที่รายการลาด้านล่าง</div>
+      <div class="note">ยังไม่อนุมัติ เว้นช่องอนุมัติไว้ก่อน กลับมาใส่ทีหลังได้ โดยกด "แก้ไข" ที่รายการลาด้านล่าง</div>
       <label class="switch" for="lv-skip" style="padding:0">
         <div class="note">ไม่นับวันเสาร์-อาทิตย์</div>
         <input type="checkbox" id="lv-skip" checked>
@@ -756,7 +758,7 @@ function renderToday() {
   const t = todayRecords();
   const lt = leaves.find(l => l.days.includes(dayKey(new Date())));
   $('#leave-chip').hidden = !lt;
-  if (lt) { $('#leave-chip').textContent = `วันนี้${LEAVE_TYPES[lt.type]}`; $('#leave-chip').className = `chip ${lt.type === 'sick' ? 'sick' : 'vac'}`; }
+  if (lt) { $('#leave-chip').textContent = `วันนี้${leaveLabel(lt)}`; $('#leave-chip').className = `chip ${lt.type === 'sick' ? 'sick' : 'vac'}`; }
   $('#t-count').textContent = t.length ? `${t.length} ครั้ง` : '–';
   const fin = t.find(r => r.type !== 'checkout' && r.type !== 'out');
   const lout = [...t].reverse().find(r => r.type === 'checkout' || r.type === 'out');
@@ -957,7 +959,7 @@ function sheetRow(r) {
 }
 
 const pendingCount = () => records.filter(r => !r.synced || r.dirty).length + pendingDeletes.length
-  + leaves.filter(l => !l.synced || l.approvedDirty).length + pendingLeaveDeletes.length;
+  + leaves.filter(l => !l.synced || l.dirty || l.approvedDirty).length + pendingLeaveDeletes.length;
 
 async function syncAll() {
   if (syncing) { syncAgain = true; return; }   // มีรายการใหม่ระหว่างกำลังส่ง: ส่งต่อทันทีเมื่อรอบนี้จบ
@@ -985,7 +987,11 @@ async function syncAll() {
     }
     for (const l of leaves.filter(l => !l.synced)) {
       await postSheet({ action: 'leave_add', leave: leaveRow(l) });
-      l.synced = true; l.approvedDirty = false; persistLeaves();
+      l.synced = true; l.dirty = false; l.approvedDirty = false; persistLeaves();
+    }
+    for (const l of leaves.filter(l => l.synced && l.dirty)) {   // แก้ไขการลา: แทนที่ทุกแถวของรายการนี้ใน Sheet
+      await postSheet({ action: 'leave_edit', leave: leaveRow(l) });
+      l.dirty = false; l.approvedDirty = false; persistLeaves();
     }
     for (const l of leaves.filter(l => l.synced && l.approvedDirty)) {
       await postSheet({ action: 'leave_update', id: l.id, approved: l.approved || '' });
@@ -1113,9 +1119,11 @@ const LEAVE_TYPES = { sick: 'ลาป่วย', vacation: 'ลาพักผ�
 const thMonth = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' });
 const thDayShort = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short' });
 const fmtDay = k => thDayShort.format(new Date(k + 'T00:00:00'));
-let leaveType = 'sick', toldTouched = false;
+let leaveType = 'sick', toldTouched = false, editingLeaveId = null;
 let leaveMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
 const persistLeaves = () => store.set('ci.leaves', leaves);
+const leaveWeight = l => l.period === 'pm' ? 0.5 : 1;   // ลาบ่าย = ครึ่งวัน
+const leaveLabel = l => l.period === 'pm' ? `ลาบ่าย (${LEAVE_TYPES[l.type]})` : LEAVE_TYPES[l.type];
 
 // วันลาทั้งหมดในช่วง (เป็น "YYYY-MM-DD") ตัดเสาร์-อาทิตย์ได้
 function leaveDays(from, to, skipWeekend) {
@@ -1129,25 +1137,41 @@ function leaveDays(from, to, skipWeekend) {
   return out;
 }
 
-function openLeaveForm(type) {
-  leaveType = type;
-  $('#leave-form-title').textContent = LEAVE_TYPES[type];
+// เปิดฟอร์มแจ้งลาใหม่ หรือแก้การลาเดิม (ส่ง l มา)
+function openLeaveForm(type, l) {
+  editingLeaveId = l ? l.id : null;
+  leaveType = l ? l.type : type;
+  $('#leave-form-title').textContent = (l ? 'แก้ไข' : '') + LEAVE_TYPES[leaveType];
   const t = dayKey(new Date());
-  $('#lv-from').value = t; $('#lv-to').value = t; $('#lv-note').value = '';
-  $('#lv-told').value = t; $('#lv-told').max = t; toldTouched = false;
-  $('#lv-approved').value = ''; $('#lv-approved').max = t;
-  $('#lv-name').value = profile.name || '';
+  $('#lv-from').value = l ? l.from : t; $('#lv-to').value = l ? l.to : t;
+  $('#lv-note').value = l ? l.note || '' : '';
+  $('#lv-told').value = l ? l.told || '' : t; $('#lv-told').max = t; toldTouched = !!l;
+  $('#lv-approved').value = l ? l.approved || '' : ''; $('#lv-approved').max = t;
+  $('#lv-pm').checked = !!(l && l.period === 'pm');
+  $('#lv-skip').checked = l ? !l.days.some(d => [0, 6].includes(new Date(d + 'T00:00:00').getDay())) : true;
+  $('#lv-name').value = l ? l.name || '' : profile.name || '';
+  $('#lv-save').textContent = l ? 'บันทึกการแก้ไข' : 'บันทึกการลา';
+  syncPmField();
   $('#leave-form').hidden = false; updateLeaveCount();
   $('#leave-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// ลาบ่ายลาได้ทีละวัน: ล็อกวันที่สิ้นสุดให้เท่ากับวันเริ่ม
+function syncPmField() {
+  const pm = $('#lv-pm').checked;
+  if (pm) $('#lv-to').value = $('#lv-from').value;
+  $('#lv-to').disabled = pm;
+}
+
 function updateLeaveCount() {
   const n = leaveDays($('#lv-from').value, $('#lv-to').value, $('#lv-skip').checked).length;
-  $('#lv-count').textContent = n ? `รวม ${n} วัน` : 'ช่วงวันที่ไม่ถูกต้อง หรือไม่มีวันทำงานในช่วงนี้';
+  $('#lv-count').textContent = !n ? 'ช่วงวันที่ไม่ถูกต้อง หรือไม่มีวันทำงานในช่วงนี้'
+    : $('#lv-pm').checked ? 'ลาบ่าย ครึ่งวัน (0.5 วัน)' : `รวม ${n} วัน`;
 }
 
 function saveLeave() {
-  const from = $('#lv-from').value, to = $('#lv-to').value;
+  const pm = $('#lv-pm').checked;
+  const from = $('#lv-from').value, to = pm ? from : $('#lv-to').value;
   const days = leaveDays(from, to, $('#lv-skip').checked);
   const name = $('#lv-name').value.trim();
   if (!name) { $('#lv-name').focus(); toast('กรอกชื่อผู้ลา'); return; }
@@ -1157,15 +1181,22 @@ function saveLeave() {
   if (told > dayKey(new Date())) { $('#lv-told').focus(); toast('วันที่แจ้งหัวหน้าต้องไม่เกินวันนี้'); return; }
   const approved = $('#lv-approved').value;
   if (approved > dayKey(new Date())) { $('#lv-approved').focus(); toast('วันที่อนุมัติต้องไม่เกินวันนี้'); return; }
-  const dup = days.filter(d => leaves.some(l => (l.name || '') === name && l.days.includes(d)));
+  const dup = days.filter(d => leaves.some(l => l.id !== editingLeaveId && (l.name || '') === name && l.days.includes(d)));
   if (dup.length) { toast(`มีการลาวันที่ ${dup.slice(0, 3).map(fmtDay).join(', ')} อยู่แล้ว`); return; }
-  leaves.push({ id: uid(), type: leaveType, from, to, days, note: $('#lv-note').value.trim(),
-    createdAt: Date.now(), name, told, approved });
+  const data = { type: leaveType, from, to, days, note: $('#lv-note').value.trim(), name, told, approved, period: pm ? 'pm' : '' };
+  const old = editingLeaveId && leaves.find(l => l.id === editingLeaveId);
+  if (old) {
+    Object.assign(old, data);
+    if (old.synced) old.dirty = true;   // ส่งแก้ทั้งรายการไปที่ Sheet
+  } else {
+    leaves.push(Object.assign({ id: uid(), createdAt: Date.now() }, data));
+  }
   persistLeaves();
   $('#leave-form').hidden = true;
   leaveMonth = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1);
   renderLeave(); renderToday();
-  toast(`บันทึก${LEAVE_TYPES[leaveType]} ${days.length} วันแล้ว`);
+  toast(old ? 'บันทึกการแก้ไขแล้ว' : `บันทึก${pm ? 'ลาบ่าย' : LEAVE_TYPES[leaveType] + ' ' + days.length + ' วัน'}แล้ว`);
+  editingLeaveId = null;
   syncAll();
 }
 
@@ -1173,43 +1204,29 @@ function renderLeave() {
   const y = leaveMonth.getFullYear(), m = leaveMonth.getMonth() + 1;
   const inMonth = d => +d.slice(0, 4) === y && +d.slice(5, 7) === m;
   const inYear = d => +d.slice(0, 4) === y;
-  const count = (type, pred) => leaves.filter(l => l.type === type).reduce((n, l) => n + l.days.filter(pred).length, 0);
+  const count = (type, pred) => leaves.filter(l => l.type === type).reduce((n, l) => n + l.days.filter(pred).length * leaveWeight(l), 0);
   $('#lv-month').textContent = thMonth.format(leaveMonth);
   $('#lv-sick').textContent = `${count('sick', inMonth)} วัน`;
   $('#lv-vac').textContent = `${count('vacation', inMonth)} วัน`;
   $('#lv-year').textContent = `${count('sick', inYear)} / ${count('vacation', inYear)}`;
   const list = leaves.filter(l => l.days.some(inMonth)).sort((a, b) => (a.from < b.from ? 1 : -1));
   $('#leave-list').innerHTML = list.length ? list.map(l => {
-    const n = l.days.filter(inMonth).length;
+    const n = l.days.filter(inMonth).length * leaveWeight(l);
     const range = l.from === l.to ? fmtDay(l.from) : `${fmtDay(l.from)} – ${fmtDay(l.to)}`;
-    const pend = settings.scriptUrl && (!l.synced || l.approvedDirty) ? ' <span class="chip">รอส่ง</span>' : '';
-    const t = dayKey(new Date());
+    const pend = settings.scriptUrl && (!l.synced || l.dirty || l.approvedDirty) ? ' <span class="chip">รอส่ง</span>' : '';
+    const total = l.days.length * leaveWeight(l);
     return `<div class="row lv-row">
       <div class="row-main">
-        <div class="row-title"><span class="chip ${l.type === 'sick' ? 'sick' : 'vac'}">${LEAVE_TYPES[l.type]}</span> ${range}${pend}</div>
-        <div class="row-sub">${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${l.days.length !== n ? ` (ทั้งหมด ${l.days.length} วัน)` : ''}${l.told ? ` · แจ้งหัวหน้า ${fmtDay(l.told)}` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
+        <div class="row-title"><span class="chip ${l.type === 'sick' ? 'sick' : 'vac'}">${leaveLabel(l)}</span> ${range}${pend}</div>
+        <div class="row-sub">${esc(l.name || 'ไม่ระบุชื่อ')} · ${n} วันในเดือนนี้${total !== n ? ` (ทั้งหมด ${total} วัน)` : ''}${l.told ? ` · แจ้งหัวหน้า ${fmtDay(l.told)}` : ''}${l.note ? ' · ' + esc(l.note) : ''}</div>
         <div class="row-sub">${l.approved ? `อนุมัติ ${fmtDay(l.approved)}` : 'ยังไม่ใส่วันที่อนุมัติ'}</div>
-        <div class="lv-appr" data-lv-appr-box="${l.id}" hidden>
-          <input class="input num" type="date" max="${t}" value="${l.approved || t}" aria-label="วันที่หัวหน้าอนุมัติ">
-          <button class="btn sm primary" data-lv-appr-save="${l.id}">บันทึก</button>
-        </div>
       </div>
       <div class="lv-btns">
-        <button class="btn sm" data-lv-appr="${l.id}">${l.approved ? 'แก้วันอนุมัติ' : 'ใส่วันอนุมัติ'}</button>
+        <button class="btn sm" data-lv-edit="${l.id}">แก้ไข</button>
         <button class="btn sm danger" data-lv-del="${l.id}">ยกเลิกการลา</button>
       </div>
     </div>`;
   }).join('') : '<div class="empty"><b>ไม่มีการลาในเดือนนี้</b>กดปุ่มลาป่วยหรือลาพักผ่อนด้านบนเพื่อแจ้งลา</div>';
-}
-
-// ใส่/แก้วันที่หัวหน้าอนุมัติ (ย้อนหลังได้) ส่งไปแก้เฉพาะช่องอนุมัติใน Sheet
-function setLeaveApproval(id, date) {
-  const l = leaves.find(x => x.id === id); if (!l) return;
-  if (!date) { toast('เลือกวันที่อนุมัติ'); return; }
-  if (date > dayKey(new Date())) { toast('วันที่อนุมัติต้องไม่เกินวันนี้'); return; }
-  l.approved = date;
-  if (l.synced) l.approvedDirty = true;
-  persistLeaves(); renderLeave(); toast(`บันทึกวันที่อนุมัติ ${fmtDay(date)} แล้ว`); syncAll();
 }
 
 function deleteLeave(id) {
@@ -1222,7 +1239,8 @@ function deleteLeave(id) {
 function leaveRow(l) {
   const c = new Date(l.createdAt);
   return { id: l.id, type: LEAVE_TYPES[l.type], days: l.days, note: l.note || '', name: l.name || profile.name || '',
-    empId: '', created: `${dayKey(c)} ${hms(c)}`, told: l.told || '', approved: l.approved || '' };
+    empId: '', created: `${dayKey(c)} ${hms(c)}`, told: l.told || '', approved: l.approved || '',
+    period: l.period === 'pm' ? 'บ่าย' : 'ทั้งวัน' };
 }
 
 /* ---------- sites ---------- */
@@ -1303,20 +1321,19 @@ $('#lv-from').onchange = () => {
   if ($('#lv-to').value < $('#lv-from').value) $('#lv-to').value = $('#lv-from').value;
   // ลาย้อนหลัง: ตั้งวันที่แจ้งหัวหน้าเป็นวันเริ่มลาไว้ก่อน (แก้เองได้)
   if (!toldTouched) { const t = dayKey(new Date()), f = $('#lv-from').value; $('#lv-told').value = f && f < t ? f : t; }
-  updateLeaveCount();
+  syncPmField(); updateLeaveCount();
 };
 $('#lv-told').onchange = () => { toldTouched = true; };
 $('#lv-to').onchange = updateLeaveCount;
 $('#lv-skip').onchange = updateLeaveCount;
-$('#lv-cancel').onclick = () => $('#leave-form').hidden = true;
+$('#lv-pm').onchange = () => { syncPmField(); updateLeaveCount(); };
+$('#lv-cancel').onclick = () => { $('#leave-form').hidden = true; editingLeaveId = null; };
 $('#leave-form').onsubmit = e => { e.preventDefault(); saveLeave(); };
 $('#lv-prev').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() - 1, 1); renderLeave(); };
 $('#lv-next').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() + 1, 1); renderLeave(); };
 $('#leave-list').onclick = e => {
-  const ap = e.target.closest('[data-lv-appr]');
-  if (ap) { const box = $(`[data-lv-appr-box="${ap.dataset.lvAppr}"]`); box.hidden = !box.hidden; return; }
-  const sv = e.target.closest('[data-lv-appr-save]');
-  if (sv) { setLeaveApproval(sv.dataset.lvApprSave, sv.previousElementSibling.value); return; }
+  const ed = e.target.closest('[data-lv-edit]');
+  if (ed) { const l = leaves.find(x => x.id === ed.dataset.lvEdit); if (l) openLeaveForm(l.type, l); return; }
   const b = e.target.closest('[data-lv-del]'); if (!b) return;
   if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'กดอีกครั้งเพื่อยืนยัน'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'ยกเลิกการลา'; }, 3000); return; }
   deleteLeave(b.dataset.lvDel);
