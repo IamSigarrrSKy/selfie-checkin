@@ -102,6 +102,11 @@ button{cursor:pointer}
 .leave-btn span{font-size:12.5px;color:var(--muted)}
 .leave-btn.sick b{color:var(--bad)}
 .leave-btn.vac b{color:var(--accent)}
+.leave-btn.pm{grid-column:1/-1}
+.leave-btn.pm b{color:var(--warn)}
+.lv-type{display:flex;gap:8px}
+.lv-type .btn{flex:1}
+.lv-type .btn.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .month-nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .month-nav b{font-size:16px}
 .chip.sick{background:var(--bad-soft);color:var(--bad)}
@@ -292,10 +297,15 @@ button{cursor:pointer}
     <div class="leave-actions">
       <button class="leave-btn sick" data-leave="sick"><b>ลาป่วย</b><span>แจ้งวันที่ป่วย</span></button>
       <button class="leave-btn vac" data-leave="vacation"><b>ลาพักผ่อน</b><span>แจ้งวันหยุดพักผ่อน</span></button>
+      <button class="leave-btn pm" data-leave="pm"><b>ลาบ่าย</b><span>ลาครึ่งวันช่วงบ่าย นับ 0.5 วัน (ลงย้อนหลังได้)</span></button>
     </div>
 
     <form class="card form" id="leave-form" hidden autocomplete="off">
       <div class="sec-title" id="leave-form-title" style="margin:0">ลาป่วย</div>
+      <div class="lv-type" role="group" aria-label="ประเภทการลา">
+        <button type="button" class="btn sm" data-lv-type="sick">ลาป่วย</button>
+        <button type="button" class="btn sm" data-lv-type="vacation">ลาพักผ่อน</button>
+      </div>
       <div class="field"><label for="lv-name">ชื่อผู้ลา</label><input class="input" id="lv-name" required placeholder="ชื่อ–นามสกุล"></div>
       <div class="grid2">
         <div class="field"><label for="lv-from">ตั้งแต่วันที่</label><input class="input num" type="date" id="lv-from" required></div>
@@ -1052,7 +1062,7 @@ function openDetail(id) {
     </dl>
     ${r.origTs ? `<div class="note">แก้ไขเวลาจากเดิม ${thShort.format(new Date(r.origTs))} ${hms(new Date(r.origTs))} · รูปยังแสดงเวลาที่ถ่ายจริง</div>` : ''}
     <div class="btns">
-      ${isCheckout(r) ? '<button class="btn primary" id="detail-edit" style="flex:1">แก้เวลาเช็คเอาท์</button>' : ''}
+      ${isCheckout(r) ? '<button class="btn primary" id="detail-edit" style="flex:1">แก้วันที่/เวลาเช็คเอาท์</button>' : ''}
       <button class="btn danger" id="detail-del" style="flex:1">ลบรายการ</button>
     </div>
     <div class="btns">
@@ -1065,21 +1075,25 @@ function openDetail(id) {
   $('#detail-del').onclick = e => confirmTap(e.currentTarget, 'กดอีกครั้งเพื่อลบ (ลบใน Sheet ด้วย)', () => deleteRecord(id));
 }
 
-// แก้ได้เฉพาะเวลาของรายการเช็คเอาท์ (ลืมเช็คเอาท์) แล้วส่งไปแก้ใน Sheet ด้วย
+// แก้ได้เฉพาะวันที่/เวลาของรายการเช็คเอาท์ (ลืมเช็คเอาท์) แล้วส่งไปแก้ใน Sheet ด้วย
 const isCheckout = r => r.type === 'checkout' || r.type === 'out';
 function openEdit(id) {
   const r = records.find(x => x.id === id); if (!r || !isCheckout(r)) return;
   const d = new Date(r.ts);
   $('#detail-card').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <b style="font-size:18px">แก้เวลาเช็คเอาท์</b>
+      <b style="font-size:18px">แก้วันที่/เวลาเช็คเอาท์</b>
       <button class="btn sm" id="edit-back">ยกเลิก</button>
     </div>
     <form id="edit-form" style="display:flex;flex-direction:column;gap:12px">
       <div class="note">${thDate.format(d)} · ${esc(placeOf(r))}</div>
-      <div class="field"><label for="ed-time">เวลาเช็คเอาท์</label>
-        <input class="input num" type="time" step="1" id="ed-time" value="${hms(d)}" required></div>
-      <div class="note">เวลาใหม่จะถูกแก้ใน Google Sheet ด้วย</div>
+      <div class="grid2">
+        <div class="field"><label for="ed-date">วันที่เช็คเอาท์</label>
+          <input class="input num" type="date" id="ed-date" value="${dayKey(d)}" max="${dayKey(new Date())}" required></div>
+        <div class="field"><label for="ed-time">เวลาเช็คเอาท์</label>
+          <input class="input num" type="time" step="1" id="ed-time" value="${hms(d)}" required></div>
+      </div>
+      <div class="note">เช่น ลืมกดเช็คเอาท์เมื่อวาน แล้วมากดวันนี้ ให้เปลี่ยนวันที่เป็นเมื่อวาน วันที่และเวลาใหม่จะถูกแก้ใน Google Sheet และใบลงชื่อด้วย</div>
       <div class="btns">
         <button type="button" class="btn danger" id="ed-del">ลบรายการ</button>
         <span style="flex:1"></span>
@@ -1092,12 +1106,15 @@ function openEdit(id) {
     e.preventDefault();
     const t = ($('#ed-time').value || '').split(':').map(Number);
     if (t.length < 2 || t.some(isNaN)) { toast('เวลาไม่ถูกต้อง'); return; }
-    const nd = new Date(d); nd.setHours(t[0], t[1], t[2] || 0, 0);
+    const day = $('#ed-date').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) { toast('วันที่ไม่ถูกต้อง'); return; }
+    const nd = new Date(day + 'T00:00:00'); nd.setHours(t[0], t[1], t[2] || 0, 0);
+    if (nd.getTime() > Date.now()) { toast('วันที่/เวลาเช็คเอาท์ต้องไม่เกินตอนนี้'); return; }
     const ts = nd.getTime();
     if (ts !== r.ts && !r.origTs) r.origTs = r.ts;
     r.ts = ts;
     r.editedAt = Date.now(); if (r.synced) r.dirty = true;
-    persistRecords(); renderAll(); openDetail(id); toast('แก้เวลาเช็คเอาท์แล้ว'); syncAll();
+    persistRecords(); renderAll(); openDetail(id); toast('แก้วันที่/เวลาเช็คเอาท์แล้ว'); syncAll();
   };
 }
 
@@ -1139,21 +1156,27 @@ function leaveDays(from, to, skipWeekend) {
 
 // เปิดฟอร์มแจ้งลาใหม่ หรือแก้การลาเดิม (ส่ง l มา)
 function openLeaveForm(type, l) {
+  const pmButton = type === 'pm';   // ปุ่มลาบ่าย: เริ่มเป็นลาป่วยครึ่งวันบ่าย เปลี่ยนประเภทได้ในฟอร์ม
   editingLeaveId = l ? l.id : null;
-  leaveType = l ? l.type : type;
-  $('#leave-form-title').textContent = (l ? 'แก้ไข' : '') + LEAVE_TYPES[leaveType];
+  setLeaveType(l ? l.type : pmButton ? 'sick' : type);
   const t = dayKey(new Date());
   $('#lv-from').value = l ? l.from : t; $('#lv-to').value = l ? l.to : t;
   $('#lv-note').value = l ? l.note || '' : '';
   $('#lv-told').value = l ? l.told || '' : t; $('#lv-told').max = t; toldTouched = !!l;
   $('#lv-approved').value = l ? l.approved || '' : ''; $('#lv-approved').max = t;
-  $('#lv-pm').checked = !!(l && l.period === 'pm');
+  $('#lv-pm').checked = l ? l.period === 'pm' : pmButton;
   $('#lv-skip').checked = l ? !l.days.some(d => [0, 6].includes(new Date(d + 'T00:00:00').getDay())) : true;
   $('#lv-name').value = l ? l.name || '' : profile.name || '';
   $('#lv-save').textContent = l ? 'บันทึกการแก้ไข' : 'บันทึกการลา';
   syncPmField();
   $('#leave-form').hidden = false; updateLeaveCount();
   $('#leave-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function setLeaveType(type) {
+  leaveType = type;
+  $('#leave-form-title').textContent = (editingLeaveId ? 'แก้ไข' : 'แจ้ง') + LEAVE_TYPES[type];
+  document.querySelectorAll('[data-lv-type]').forEach(b => b.classList.toggle('on', b.dataset.lvType === type));
 }
 
 // ลาบ่ายลาได้ทีละวัน: ล็อกวันที่สิ้นสุดให้เท่ากับวันเริ่ม
@@ -1327,6 +1350,7 @@ $('#lv-told').onchange = () => { toldTouched = true; };
 $('#lv-to').onchange = updateLeaveCount;
 $('#lv-skip').onchange = updateLeaveCount;
 $('#lv-pm').onchange = () => { syncPmField(); updateLeaveCount(); };
+document.querySelectorAll('[data-lv-type]').forEach(b => b.onclick = () => setLeaveType(b.dataset.lvType));
 $('#lv-cancel').onclick = () => { $('#leave-form').hidden = true; editingLeaveId = null; };
 $('#leave-form').onsubmit = e => { e.preventDefault(); saveLeave(); };
 $('#lv-prev').onclick = () => { leaveMonth = new Date(leaveMonth.getFullYear(), leaveMonth.getMonth() - 1, 1); renderLeave(); };
