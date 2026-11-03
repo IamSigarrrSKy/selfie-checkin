@@ -1075,7 +1075,7 @@ const SIGN_QR_SIZE = 140;
 
 function signQrBlobs() {
   return SIGN_QR_URLS.map(u => {
-    try { return UrlFetchApp.fetch(u).getBlob(); } catch (e) { return null; }   // โหลดไม่ได้: ข้าม QR นั้น
+    try { return UrlFetchApp.fetch(u).getBlob(); } catch (e) { console.warn('โหลด QR ไม่ได้: ' + u + ' ' + e); return null; }   // ข้าม QR นั้น
   }).filter(Boolean);
 }
 
