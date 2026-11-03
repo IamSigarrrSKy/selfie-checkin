@@ -1050,12 +1050,12 @@ function makeSignSheets() {
 
   const names = Object.keys(listed).filter(n => listed[n][2] === true).sort((a, b) => a.localeCompare(b, 'th'));
   const top = o => Object.keys(o).sort((a, b) => o[b] - o[a])[0];
-  const made = {};
+  const made = {}, qr = signQrBlobs();
   names.forEach(name => {
     const p = people[name] || { regions: {}, monthRegions: {}, days: {}, leaves: {} };
     const region = listed[name][1] || top(p.monthRegions) || top(p.regions) || OTHER_REGION;
     const head = (centers[region] || centers[OTHER_REGION] || '') + ' ประจำเดือน ' + TH_MONTHS[month - 1] + ' ' + yearBE;
-    made[writeSignTab(ss, name, head, year, month, days, p, holidays, signer).getName()] = true;
+    made[writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr).getName()] = true;
   });
 
   // ลบแท็บใบลงชื่อของคนที่เอาออกจากรายชื่อแล้ว
@@ -1066,8 +1066,21 @@ function makeSignSheets() {
     '\n(ระบบอัปเดตเองทุกชั่วโมงด้วย)\n\nได้ไฟล์ Excel: เมนู ใบลงชื่อ → ส่งออกเป็น Excel');
 }
 
+// QR ที่มุมล่างซ้ายของใบลงชื่อทุกคน (รูปอยู่ในโฟลเดอร์ qr/ ของเว็บแอป) โหลดครั้งเดียวต่อรอบ
+const SIGN_QR_URLS = [
+  'https://iamsigarrrsky.github.io/selfie-checkin/qr/qr-1.png',
+  'https://iamsigarrrsky.github.io/selfie-checkin/qr/qr-2.png'
+];
+const SIGN_QR_SIZE = 140;
+
+function signQrBlobs() {
+  return SIGN_QR_URLS.map(u => {
+    try { return UrlFetchApp.fetch(u).getBlob(); } catch (e) { return null; }   // โหลดไม่ได้: ข้าม QR นั้น
+  }).filter(Boolean);
+}
+
 // หนึ่งแท็บต่อหนึ่งคน หน้าตาเหมือนใบลงชื่อเดิม (ฟอนต์ TH SarabunIT๙ ตอนเปิดใน Excel)
-function writeSignTab(ss, name, head, year, month, days, p, holidays, signer) {
+function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr) {
   const tab = name.replace(/[\[\]*?\/\\:]/g, ' ').slice(0, 99);
   let sh = ss.getSheetByName(tab);
   if (!sh) {
@@ -1076,6 +1089,7 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer) {
   }
   sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart();
   sh.clear();
+  sh.getImages().forEach(img => img.remove());   // QR รอบก่อน
   trimColumns(sh, 8);
   const need = 4 + days + 1 + signer.length;
   if (sh.getMaxRows() > need) sh.deleteRows(need + 1, sh.getMaxRows() - need);
@@ -1116,5 +1130,9 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer) {
   gray.forEach(d => sh.getRange(4 + d, 1, 1, 8).setBackground('#e8e8e8'));
 
   signer.forEach((line, i) => sh.getRange(6 + days + i, 5, 1, 4).merge().setValue(line).setHorizontalAlignment('center'));
+  // QR วางเรียงกันที่มุมล่างซ้าย ข้างช่องผู้ลงนาม
+  (qr || []).slice(0, 2).forEach((blob, i) => {   // ใบแรกที่คอลัมน์ A ใบที่สองที่คอลัมน์ C
+    sh.insertImage(blob, i ? 3 : 1, 6 + days, i ? 10 : 6, 4).setWidth(SIGN_QR_SIZE).setHeight(SIGN_QR_SIZE);
+  });
   return sh;
 }
