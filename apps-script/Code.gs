@@ -59,10 +59,10 @@ function doPost(e) {
     changed = ['add', 'update', 'delete', 'leave_add', 'leave_delete', 'leave_update', 'leave_edit'].indexOf(req.action) >= 0;
 
     if (req.action === 'ping') return out({ ok: true, sheet: sh.getParent().getName() + ' / ' + sh.getName() });
-    if (req.action === 'leave_add') return out(addLeave(req.leave));
-    if (req.action === 'leave_delete') return out(deleteLeave(req.id));
+    if (req.action === 'leave_add') { const res = addLeave(req.leave); tidyLeaveSheet(leaveSheet()); return out(res); }
+    if (req.action === 'leave_delete') { const res = deleteLeave(req.id); tidyLeaveSheet(leaveSheet()); return out(res); }
     if (req.action === 'leave_update') return out(updateLeaveApproval(req.id, req.approved));
-    if (req.action === 'leave_edit') { deleteLeave(req.leave.id); return out(addLeave(req.leave)); }
+    if (req.action === 'leave_edit') { deleteLeave(req.leave.id); const res = addLeave(req.leave); tidyLeaveSheet(leaveSheet()); return out(res); }
     if (req.action === 'dashboard') return out(dashboardData(req));
 
     if (req.action === 'add') {
@@ -146,8 +146,8 @@ function toRow(r, photoUrl, created) {
 const MONTH_DIVIDER = 'month-';
 const isMonthDivider = id => String(id || '').indexOf(MONTH_DIVIDER) === 0;
 
-function monthDividerRow(ym) {
-  const row = new Array(HEADERS.length).fill('');
+function monthDividerRow(ym, width) {
+  const row = new Array(width || HEADERS.length).fill('');
   row[0] = MONTH_DIVIDER + ym;
   row[1] = 'เดือน' + TH_MONTHS[+ym.slice(5, 7) - 1] + ' ' + (+ym.slice(0, 4) + 543);
   return row;
@@ -624,6 +624,8 @@ function buildLeave(ss) {
   [70, 140, 100, 160, 110, 260, 150, 140, 140, 90].forEach((w, i) => sh.setColumnWidth(i + 1, w));
   band(sh, sh.getRange(2, 1, rows, n));
   sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=LEFT($A2,' + MONTH_DIVIDER.length + ')="' + MONTH_DIVIDER + '"')
+      .setBackground('#cfe3dd').setFontColor(C.title).setBold(true).setRanges([sh.getRange(2, 1, rows, n)]).build(),   // แถวคั่นเดือน
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาป่วย')
       .setFontColor('#b4282f').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('ลาพักผ่อน')
@@ -631,7 +633,31 @@ function buildLeave(ss) {
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(OFFSITE)
       .setFontColor('#6b4fb0').setBold(true).setRanges([sh.getRange(2, 3, rows, 1)]).build()
   ]);
+  tidyLeaveSheet(sh);
   return sh;
+}
+
+// แท็บการลา: เรียงตามวันที่ลา (แล้วตามชื่อ) และมีแถวคั่นก่อนแต่ละเดือน
+// เขียนตารางใหม่ทั้งหมด แท็บนี้ไม่มีสูตร แถวที่หัวหน้าเพิ่มเองก็ถูกจัดเรียงด้วย
+function tidyLeaveSheet(sh) {
+  const n = sh.getLastRow() - 1, w = LEAVE_HEADERS.length;
+  if (n < 1) return;
+  const ymOf = d => Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM');
+  const rows = sh.getRange(2, 1, n, w).getValues().filter(r => !isMonthDivider(r[0]) && r[1] !== '' && r[1] !== null);
+  const dated = rows.filter(r => r[1] instanceof Date), other = rows.filter(r => !(r[1] instanceof Date));
+  dated.sort((a, b) => a[1] - b[1] || String(a[3]).localeCompare(String(b[3]), 'th') || String(a[0]).localeCompare(String(b[0])));
+  const out = [];
+  let ym = '';
+  dated.forEach(r => {
+    const m = ymOf(r[1]);
+    if (m !== ym) { out.push(monthDividerRow(m, w)); ym = m; }
+    out.push(r);
+  });
+  other.forEach(r => out.push(r));   // วันที่พิมพ์ผิดรูปแบบ: ไว้ท้ายตาราง
+  sh.getRange(2, 1, n, w).clearContent();
+  if (!out.length) return;
+  if (out.length + 1 > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), out.length + 1 - sh.getMaxRows());
+  sh.getRange(2, 1, out.length, w).setValues(out);
 }
 
 /* ---------- สรุปการลารายเดือน (แยกตามผู้ลา) ---------- */
@@ -656,7 +682,7 @@ function buildLeaveSummary(ss) {
   styleHeader(sh, 4, head.length);
 
   // แถวละหนึ่งคนต่อหนึ่งเดือน เรียงเดือนล่าสุดก่อน แล้วเรียงตามชื่อ
-  sh.getRange('A5').setFormula('=IFERROR(SORT(UNIQUE(FILTER({ARRAYFORMULA(EOMONTH(' + V + 'B2:B,-1)+1),' + V + 'D2:D},' + V + 'B2:B<>"",' + V + 'C2:C<>"' + OFFSITE + '")),1,FALSE,2,TRUE),)');   // งานนอกสถานที่ไม่นับเป็นการลา
+  sh.getRange('A5').setFormula('=IFERROR(SORT(UNIQUE(FILTER({ARRAYFORMULA(EOMONTH(' + V + 'B2:B,-1)+1),' + V + 'D2:D},ISNUMBER(' + V + 'B2:B),' + V + 'C2:C<>"' + OFFSITE + '")),1,FALSE,2,TRUE),)');   // งานนอกสถานที่ไม่นับเป็นการลา
   const cnt = (type) => half(V + 'B2:B,">="&m,' + V + 'B2:B,"<="&EOMONTH(m,0),' + V + 'D2:D,n,' + V + 'C2:C,"' + type + '"');
   // วันที่ลาเรียงตามวัน วันที่ลาบ่ายมีคำว่า "บ่าย" ต่อท้าย
   const days = (type) => 'IFERROR("' + type.replace('ลา', '') + ' "&TEXTJOIN(", ",TRUE,INDEX(SORT(FILTER({' + V + 'B2:B,ARRAYFORMULA(TEXT(' +
