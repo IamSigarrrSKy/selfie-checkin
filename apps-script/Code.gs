@@ -74,6 +74,7 @@ function doPost(e) {
         const blob = Utilities.newBlob(Utilities.base64Decode(req.photo.split(',')[1]), 'image/jpeg', name);
         photoUrl = getFolder().createFile(blob).getUrl();
       }
+      addMonthDivider(sh, r.date);
       sh.appendRow(toRow(r, photoUrl, new Date()));
       return out({ ok: true, photoUrl: photoUrl });
     }
@@ -141,6 +142,45 @@ function toRow(r, photoUrl, created) {
     regionOf(r.site), photoUrl || '', r.link || 'A'];
 }
 
+/* ---------- แถวคั่นเดือนในแท็บเช็คอิน ("เดือนพฤศจิกายน 2569") ID ขึ้นต้นด้วย month- ---------- */
+const MONTH_DIVIDER = 'month-';
+const isMonthDivider = id => String(id || '').indexOf(MONTH_DIVIDER) === 0;
+
+function monthDividerRow(ym) {
+  const row = new Array(HEADERS.length).fill('');
+  row[0] = MONTH_DIVIDER + ym;
+  row[1] = 'เดือน' + TH_MONTHS[+ym.slice(5, 7) - 1] + ' ' + (+ym.slice(0, 4) + 543);
+  return row;
+}
+
+// เช็คอินแรกของเดือนใหม่: ต่อแถวคั่นเดือนก่อน (รายการย้อนหลังของเดือนก่อนไม่ต้องคั่น)
+function addMonthDivider(sh, date) {
+  const ym = String(date || '').slice(0, 7), last = sh.getLastRow();
+  if (!/^\d{4}-\d{2}$/.test(ym) || last < 2) return;
+  const prev = sh.getRange(last, 1, 1, 2).getValues()[0];
+  if (isMonthDivider(prev[0]) || !(prev[1] instanceof Date)) return;
+  const prevYm = Utilities.formatDate(prev[1], 'Asia/Bangkok', 'yyyy-MM');
+  if (ym > prevYm) sh.appendRow(monthDividerRow(ym));
+}
+
+// ใส่แถวคั่นให้ข้อมูลเดิม: ก่อนแถวแรกของแต่ละเดือน (ไล่จากล่างขึ้นบน แถวจะได้ไม่เลื่อน)
+function insertMonthDividers(sh) {
+  const last = sh.getLastRow();
+  if (last < 2) return;
+  const vals = sh.getRange(2, 1, last - 1, 2).getValues();
+  const ymOf = v => v[1] instanceof Date ? Utilities.formatDate(v[1], 'Asia/Bangkok', 'yyyy-MM') : '';
+  for (let i = vals.length - 1; i >= 0; i--) {
+    const ym = ymOf(vals[i]);
+    if (!ym || isMonthDivider(vals[i][0])) continue;
+    let j = i - 1;   // แถวข้อมูลก่อนหน้า (ข้ามแถวว่าง)
+    while (j >= 0 && !ymOf(vals[j]) && !isMonthDivider(vals[j][0])) j--;
+    if (j >= 0 && isMonthDivider(vals[j][0])) continue;   // มีแถวคั่นอยู่แล้ว
+    if (j >= 0 && ymOf(vals[j]) >= ym) continue;          // เดือนเดิม หรือรายการย้อนหลัง
+    sh.insertRowBefore(i + 2);
+    sh.getRange(i + 2, 1, 1, HEADERS.length).setValues([monthDividerRow(ym)]);
+  }
+}
+
 function findRow(sh, id) {
   const n = sh.getLastRow() - 1;
   if (n < 1) return 0;
@@ -197,7 +237,7 @@ function onSheetEdit(e) {
   const n = last - first + 1, width = sh.getName() === LOG ? HEADERS.length : LEAVE_HEADERS.length;
   const vals = sh.getRange(first, 1, n, width).getValues();
   vals.forEach((v, i) => {
-    if (v[1] === '' || v[1] === null) return;   // ไม่มีวันที่ = แถวว่าง
+    if (v[1] === '' || v[1] === null || isMonthDivider(v[0])) return;   // แถวว่าง หรือแถวคั่นเดือน
     const row = first + i;
     if (!v[0]) sh.getRange(row, 1).setValue('manual-' + Date.now().toString(36) + i);
     if (typeof v[1] === 'string') sh.getRange(row, 2).setValue(dateSerial(v[1].trim()));
@@ -257,7 +297,8 @@ function deleteMonth() {
   const pick = (sh) => {
     if (!sh || sh.getLastRow() < 2) return [];
     const vals = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
-    return vals.map((v, i) => ({ row: i + 2, v })).filter(x => inMonth(x.v[1]));
+    const divider = MONTH_DIVIDER + year + '-' + ('0' + month).slice(-2);   // แถวคั่นของเดือนนั้นลบไปด้วย
+    return vals.map((v, i) => ({ row: i + 2, v })).filter(x => inMonth(x.v[1]) || String(x.v[0]) === divider);
   };
   const a = pick(log), b = pick(lv);
   if (!a.length && !b.length) { ui.alert('ไม่มีข้อมูลของเดือน ' + month + '/' + (year + 543)); return; }
@@ -362,12 +403,17 @@ function buildLog(ss) {
   if (sh.getLastRow() > 1) sh.getRange(2, 12, sh.getLastRow() - 1, 1).clearContent();
   if (sh.getLastRow() > 1) sh.getRange(2, 17, sh.getLastRow() - 1, 2).clearContent();
 
-  // เติมภาคให้แถวเก่าที่ยังไม่มี
+  // แถวคั่นเดือนให้ข้อมูลเดิม
+  insertMonthDividers(sh);
+
+  // เติมภาคให้แถวเก่าที่ยังไม่มี (แถวคั่นเดือนไม่มีภาค)
   const last = sh.getLastRow();
   if (last > 1) {
+    const ids = sh.getRange(2, 1, last - 1, 1).getValues();
     const sitesCol = sh.getRange(2, 7, last - 1, 1).getValues();
     const regionCol = sh.getRange(2, COL_REGION, last - 1, 1).getValues();
-    sh.getRange(2, COL_REGION, last - 1, 1).setValues(regionCol.map((v, i) => [(v[0] && v[0] !== OTHER_REGION) ? v[0] : regionOf(sitesCol[i][0])]));
+    sh.getRange(2, COL_REGION, last - 1, 1).setValues(regionCol.map((v, i) => [isMonthDivider(ids[i][0]) ? ''
+      : (v[0] && v[0] !== OTHER_REGION) ? v[0] : regionOf(sitesCol[i][0])]));
     // แถวที่บันทึกก่อนมีคอลัมน์ลิงก์รูป: ดึง URL จากสูตร HYPERLINK ในคอลัมน์รูป
     const photoF = sh.getRange(2, 14, last - 1, 1).getFormulas();
     const urlCol = sh.getRange(2, COL_PHOTO_URL, last - 1, 1).getValues();
@@ -378,6 +424,7 @@ function buildLog(ss) {
     // วันที่/เวลาที่ค้างเป็นข้อความ: แปลงเป็นตัวเลข
     const dt = sh.getRange(2, 2, last - 1, 2).getValues();
     dt.forEach((v, i) => {
+      if (isMonthDivider(ids[i][0])) return;
       if (typeof v[0] === 'string' && v[0]) sh.getRange(i + 2, 2).setValue(dateSerial(v[0].trim()));
       if (typeof v[1] === 'string' && v[1]) sh.getRange(i + 2, 3).setValue(timeSerial(v[1].trim()));
     });
@@ -396,6 +443,8 @@ function buildLog(ss) {
 
   const all = sh.getRange(2, 1, rows, n);
   sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=LEFT($A2,' + MONTH_DIVIDER.length + ')="' + MONTH_DIVIDER + '"')
+      .setBackground('#cfe3dd').setFontColor(C.title).setBold(true).setRanges([all]).build(),   // แถวคั่นเดือน
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$O2="ใช่"')
       .setFontColor(C.muted).setItalic(true).setRanges([all]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('เช็คเอาท์')
@@ -415,7 +464,7 @@ function buildDaily(ss) {
   styleHeader(sh, 1, head.length);
 
   const real = L + 'O2:O,"<>ใช่"';   // ไม่นับรายการโหมดทดสอบ
-  sh.getRange('A2').setFormula('=IFERROR(SORT(UNIQUE(FILTER(' + L + 'B2:B,' + L + 'B2:B<>"",' + L + 'O2:O<>"ใช่")),1,FALSE),)');
+  sh.getRange('A2').setFormula('=IFERROR(SORT(UNIQUE(FILTER(' + L + 'B2:B,ISNUMBER(' + L + 'B2:B),' + L + 'O2:O<>"ใช่")),1,FALSE),)');   // ข้ามแถวคั่นเดือน
   sh.getRange('B2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,IFERROR(TEXTJOIN(", ",TRUE,UNIQUE(FILTER(' + L + 'G2:G,' + L + 'B2:B=d,' + L + 'O2:O<>"ใช่"))),))))');
   sh.getRange('C2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,LET(v,MINIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + L + 'D2:D,"<>เช็คเอาท์",' + L + 'D2:D,"<>ออกงาน",' + real + '),IF(v=0,,v)))))');
   sh.getRange('D2').setFormula('=MAP(A2:A,LAMBDA(d,IF(d="",,LET(v,MAX(MAXIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + L + 'D2:D,"เช็คเอาท์",' + real + '),MAXIFS(' + L + 'C2:C,' + L + 'B2:B,d,' + L + 'D2:D,"ออกงาน",' + real + ')),IF(v=0,,v)))))');
@@ -477,7 +526,7 @@ function buildRegion(ss, name) {
   sh.clear();
   sh.getBandings().forEach(b => b.remove());
   const L = "'" + LOG + "'!", R = '$A$1';
-  const real = L + 'S2:S=' + R + ',' + L + 'O2:O<>"ใช่",' + L + 'B2:B<>""';   // รายการของภาคนี้ ไม่รวมโหมดทดสอบ
+  const real = L + 'S2:S=' + R + ',' + L + 'O2:O<>"ใช่",ISNUMBER(' + L + 'B2:B)';   // รายการของภาคนี้ ไม่รวมโหมดทดสอบและแถวคั่นเดือน
   const head = ['วันที่', 'เวลา', 'ประเภท', 'สถานที่', 'หมายเหตุ', 'รูป'];
   trimColumns(sh, Math.max(head.length, 6));
   sh.setTabColor(REGION_TAB_COLORS[name] || C.muted);
