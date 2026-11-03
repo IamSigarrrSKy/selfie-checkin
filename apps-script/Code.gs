@@ -619,6 +619,7 @@ function buildLeave(ss) {
   sh.getRange(2, 2, rows, 1).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
   sh.getRange(2, 3, rows, 1).setHorizontalAlignment('center');
   sh.getRange(2, 6, rows, 1).setWrap(true);
+  sh.getRange(2, 7, rows, 1).setNumberFormat('yyyy-mm-dd H:mm:ss');   // ลงระบบเมื่อ (แถวที่ถูกเรียงใหม่จะเป็นค่าวันที่)
   sh.getRange(2, 8, rows, 2).setNumberFormat('ddd d mmm yyyy').setHorizontalAlignment('left');
   sh.getRange(2, 10, rows, 1).setHorizontalAlignment('center');
   [70, 140, 100, 160, 110, 260, 150, 140, 140, 90].forEach((w, i) => sh.setColumnWidth(i + 1, w));
