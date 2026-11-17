@@ -1167,7 +1167,8 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr
   sh.clear();
   sh.getImages().forEach(img => img.remove());   // QR รอบก่อน
   trimColumns(sh, 8);
-  const need = 4 + days + 1 + signer.length;
+  const self = ['ลงชื่อ.................................................', '(' + name + ')', 'ผู้ปฏิบัติงาน', '......./......../............'];
+  const need = 4 + days + 1 + self.length + 1 + signer.length;
   if (sh.getMaxRows() > need) sh.deleteRows(need + 1, sh.getMaxRows() - need);
   if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());
   sh.setHiddenGridlines(true);
@@ -1205,10 +1206,13 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr
   sh.getRange(4, 1, days + 1, 8).setBorder(true, true, true, true, true, true);
   gray.forEach(d => sh.getRange(4 + d, 1, 1, 8).setBackground('#e8e8e8'));
 
-  signer.forEach((line, i) => sh.getRange(6 + days + i, 5, 1, 4).merge().setValue(line).setHorizontalAlignment('center'));
+  // ลงชื่อผู้ปฏิบัติงาน (เจ้าของใบ) ก่อน เว้นหนึ่งแถว แล้วจึงเป็นผู้ลงนามรับรอง
+  const selfRow = 6 + days, signerRow = selfRow + self.length + 1;
+  self.forEach((line, i) => sh.getRange(selfRow + i, 5, 1, 4).merge().setValue(line).setHorizontalAlignment('center'));
+  signer.forEach((line, i) => sh.getRange(signerRow + i, 5, 1, 4).merge().setValue(line).setHorizontalAlignment('center'));
   // QR วางเรียงกันที่มุมล่างซ้าย ข้างช่องผู้ลงนาม
   (qr || []).slice(0, 2).forEach((blob, i) => {   // ใบแรกที่คอลัมน์ A ใบที่สองที่คอลัมน์ C
-    sh.insertImage(blob, i ? 3 : 1, 6 + days, i ? 10 : 6, 4).setWidth(SIGN_QR_SIZE).setHeight(SIGN_QR_SIZE);
+    sh.insertImage(blob, i ? 3 : 1, signerRow, i ? 10 : 6, 4).setWidth(SIGN_QR_SIZE).setHeight(SIGN_QR_SIZE);
   });
   return sh;
 }
