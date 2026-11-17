@@ -951,6 +951,7 @@ function setupSignSheet() {
     .requireValueInList(SIGN_CENTERS.map(c => c[0]), true).setAllowInvalid(false).build());
   nm.getRange(2, 3, nm.getMaxRows() - 1, 1).setHorizontalAlignment('center');
   [280, 220, 110, 280, 300].forEach((w, i) => nm.setColumnWidth(i + 1, w));
+  nm.getRange(2, 5, nm.getMaxRows() - 1, 1).clearDataValidations();   // คอลัมน์ตำแหน่งเป็นข้อความ ไม่ใช่ช่องติ๊ก
   nm.setTabColor(C.head);
 
   // วันหยุดราชการ: ใส่วันที่ตายตัวของปีที่ตั้งไว้ให้ก่อน
@@ -1106,18 +1107,20 @@ function makeSignSheets() {
 
   // รายชื่อ: หนึ่งแถวต่อหนึ่งคน (ชื่อแบบเดียวกันรวมเป็นแถวเดียว) แถวที่กรอก "รวมกับชื่อ" ไว้คงไว้ตามเดิม
   const listed = {}, rows = [];
+  const posOf = r => typeof r[4] === 'string' ? r[4].trim() : '';   // ตำแหน่ง (ค่าที่ไม่ใช่ข้อความ เช่น ช่องติ๊ก ถือว่าว่าง)
   nmRows.forEach(r => {
     if (!normName(r[0])) return;
-    if (normName(r[3])) { rows.push([r[0], r[1], r[2], r[3], r[4] || '']); return; }
+    if (normName(r[3])) { rows.push([r[0], r[1], r[2], r[3], posOf(r)]); return; }
     const c = canon(r[0]);
     if (listed[c]) return;
-    listed[c] = [c, r[1], r[2], '', r[4] || ''];
+    listed[c] = [c, r[1], r[2], '', posOf(r)];
     rows.push(listed[c]);
   });
   const fresh = Object.keys(people).filter(n => !listed[n] &&
     (Object.keys(people[n].days).length || Object.keys(people[n].leaves).length)).sort((a, b) => a.localeCompare(b, 'th'));
   fresh.forEach(n => { listed[n] = [n, '', true, '', '']; rows.push(listed[n]); });
   if (nm.getMaxColumns() < 5) nm.insertColumnsAfter(nm.getMaxColumns(), 5 - nm.getMaxColumns());
+  nm.getRange(2, 5, nm.getMaxRows() - 1, 1).clearDataValidations();   // คอลัมน์ตำแหน่งเป็นข้อความ ไม่ใช่ช่องติ๊ก
   if (nm.getLastRow() > 1) nm.getRange(2, 1, nm.getLastRow() - 1, 5).clearContent();
   if (rows.length) {
     nm.getRange(2, 1, rows.length, 5).setValues(rows);
