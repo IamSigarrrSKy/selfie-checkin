@@ -944,13 +944,13 @@ function setupSignSheet() {
 
   // รายชื่อ: เพิ่มชื่อใหม่ให้อัตโนมัติ เอาเครื่องหมายออกถ้าไม่ต้องทำใบลงชื่อให้คนนั้น
   const nm = sheet(ss, SIGN_NAMES);
-  trimColumns(nm, 4);
-  nm.getRange(1, 1, 1, 4).setValues([['ชื่อ-สกุล', 'ภาค (ว่าง = ตามจุดที่เช็คอิน)', 'ทำใบลงชื่อ', 'รวมกับชื่อ (ถ้าเป็นคนเดียวกัน)']]);
-  styleHeader(nm, 1, 4);
+  trimColumns(nm, 5);
+  nm.getRange(1, 1, 1, 5).setValues([['ชื่อ-สกุล', 'ภาค (ว่าง = ตามจุดที่เช็คอิน)', 'ทำใบลงชื่อ', 'รวมกับชื่อ (ถ้าเป็นคนเดียวกัน)', 'ตำแหน่ง (ว่าง = ' + SIGN_DEFAULT_POSITION + ')']]);
+  styleHeader(nm, 1, 5);
   nm.getRange(2, 2, nm.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
     .requireValueInList(SIGN_CENTERS.map(c => c[0]), true).setAllowInvalid(false).build());
   nm.getRange(2, 3, nm.getMaxRows() - 1, 1).setHorizontalAlignment('center');
-  [280, 220, 110, 280].forEach((w, i) => nm.setColumnWidth(i + 1, w));
+  [280, 220, 110, 280, 300].forEach((w, i) => nm.setColumnWidth(i + 1, w));
   nm.setTabColor(C.head);
 
   // วันหยุดราชการ: ใส่วันที่ตายตัวของปีที่ตั้งไว้ให้ก่อน
@@ -1060,7 +1060,7 @@ function makeSignSheets() {
   const times = nLog > 0 ? log.getRange(2, 3, nLog, 1).getDisplayValues() : [];
   const lvVals = nLv > 0 ? lv.getRange(2, 1, nLv, LEAVE_HEADERS.length).getValues() : [];
   const nm = ss.getSheetByName(SIGN_NAMES);
-  const nmRows = nm.getLastRow() > 1 ? nm.getRange(2, 1, nm.getLastRow() - 1, Math.min(4, nm.getMaxColumns())).getValues() : [];
+  const nmRows = nm.getLastRow() > 1 ? nm.getRange(2, 1, nm.getLastRow() - 1, Math.min(5, nm.getMaxColumns())).getValues() : [];
   const aliases = {};
   nmRows.forEach(r => { if (normName(r[0]) && normName(r[3])) aliases[nameKey(r[0])] = normName(r[3]); });
   const canon = nameMerger(logVals.map(v => v[4]).concat(lvVals.map(v => v[3]), nmRows.map(r => r[0])), aliases);
@@ -1108,19 +1108,19 @@ function makeSignSheets() {
   const listed = {}, rows = [];
   nmRows.forEach(r => {
     if (!normName(r[0])) return;
-    if (normName(r[3])) { rows.push([r[0], r[1], r[2], r[3]]); return; }
+    if (normName(r[3])) { rows.push([r[0], r[1], r[2], r[3], r[4] || '']); return; }
     const c = canon(r[0]);
     if (listed[c]) return;
-    listed[c] = [c, r[1], r[2], ''];
+    listed[c] = [c, r[1], r[2], '', r[4] || ''];
     rows.push(listed[c]);
   });
   const fresh = Object.keys(people).filter(n => !listed[n] &&
     (Object.keys(people[n].days).length || Object.keys(people[n].leaves).length)).sort((a, b) => a.localeCompare(b, 'th'));
-  fresh.forEach(n => { listed[n] = [n, '', true, '']; rows.push(listed[n]); });
-  if (nm.getMaxColumns() < 4) nm.insertColumnsAfter(nm.getMaxColumns(), 4 - nm.getMaxColumns());
-  if (nm.getLastRow() > 1) nm.getRange(2, 1, nm.getLastRow() - 1, 4).clearContent();
+  fresh.forEach(n => { listed[n] = [n, '', true, '', '']; rows.push(listed[n]); });
+  if (nm.getMaxColumns() < 5) nm.insertColumnsAfter(nm.getMaxColumns(), 5 - nm.getMaxColumns());
+  if (nm.getLastRow() > 1) nm.getRange(2, 1, nm.getLastRow() - 1, 5).clearContent();
   if (rows.length) {
-    nm.getRange(2, 1, rows.length, 4).setValues(rows);
+    nm.getRange(2, 1, rows.length, 5).setValues(rows);
     nm.getRange(2, 3, rows.length, 1).insertCheckboxes();
   }
 
@@ -1131,7 +1131,7 @@ function makeSignSheets() {
     const p = people[name] || { regions: {}, monthRegions: {}, days: {}, leaves: {} };
     const region = listed[name][1] || top(p.monthRegions) || top(p.regions) || OTHER_REGION;
     const head = (centers[region] || centers[OTHER_REGION] || '') + ' ประจำเดือน ' + TH_MONTHS[month - 1] + ' ' + yearBE;
-    made[writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr).getName()] = true;
+    made[writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr, listed[name][4] || SIGN_DEFAULT_POSITION).getName()] = true;
   });
 
   // ลบแท็บใบลงชื่อของคนที่เอาออกจากรายชื่อแล้ว
@@ -1148,6 +1148,9 @@ const SIGN_QR_URLS = [
   'https://iamsigarrrsky.github.io/selfie-checkin/qr/qr-2.png'
 ];
 const SIGN_QR_SIZE = 140;
+const SIGN_QR_LABELS = ['ระบบเช็คอิน', 'ข้อมูลเช็คอิน'];   // ข้อความเหนือ QR แต่ละอัน
+// ตำแหน่งในช่องลงชื่อผู้ปฏิบัติงาน เมื่อคอลัมน์ "ตำแหน่ง" ในแท็บรายชื่อว่าง
+const SIGN_DEFAULT_POSITION = 'เจ้าหน้าที่วิเคราะห์นโยบายและแผน';
 
 function signQrBlobs() {
   return SIGN_QR_URLS.map(u => {
@@ -1156,7 +1159,7 @@ function signQrBlobs() {
 }
 
 // หนึ่งแท็บต่อหนึ่งคน หน้าตาเหมือนใบลงชื่อเดิม (ฟอนต์ TH SarabunIT๙ ตอนเปิดใน Excel)
-function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr) {
+function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr, position) {
   const tab = name.replace(/[\[\]*?\/\\:]/g, ' ').slice(0, 99);
   let sh = ss.getSheetByName(tab);
   if (!sh) {
@@ -1167,7 +1170,7 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr
   sh.clear();
   sh.getImages().forEach(img => img.remove());   // QR รอบก่อน
   trimColumns(sh, 8);
-  const self = ['ลงชื่อ.................................................', '(' + name + ')', 'ผู้ปฏิบัติงาน', '......./......../............'];
+  const self = ['ลงชื่อ.................................................', '(' + name + ')', position, '......./......../............'];
   const need = 4 + days + 1 + self.length + 1 + signer.length;
   if (sh.getMaxRows() > need) sh.deleteRows(need + 1, sh.getMaxRows() - need);
   if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());
@@ -1213,6 +1216,9 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr
   // QR วางเรียงกันที่มุมล่างซ้าย ข้างช่องผู้ลงนาม
   (qr || []).slice(0, 2).forEach((blob, i) => {   // ใบแรกที่คอลัมน์ A ใบที่สองที่คอลัมน์ C
     sh.insertImage(blob, i ? 3 : 1, signerRow, i ? 10 : 6, 4).setWidth(SIGN_QR_SIZE).setHeight(SIGN_QR_SIZE);
+    // ป้ายชื่อเหนือ QR (แถวว่างก่อนช่องผู้ลงนาม) กว้างเท่ารูป: QR แรกคอลัมน์ A–B, QR ที่สองคอลัมน์ C–D
+    sh.getRange(signerRow - 1, i ? 3 : 1, 1, 2).merge().setValue(SIGN_QR_LABELS[i] || '')
+      .setFontWeight('bold').setFontSize(SIGN_SIZE - 1).setHorizontalAlignment('left').setVerticalAlignment('bottom');
   });
   return sh;
 }
