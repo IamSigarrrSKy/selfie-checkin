@@ -784,8 +784,8 @@ function showDashboardLink() {
 /* ===================== ใบลงชื่อปฏิบัติงาน (ไฟล์แยก หนึ่งแท็บต่อหนึ่งคน ดาวน์โหลดเป็น Excel) ===================== */
 const SIGN_SHEET_ID = '';   // ID ของไฟล์ใบลงชื่อ (ไฟล์ Google Sheet อีกไฟล์)
 const SIGN_CFG = 'ตั้งค่า', SIGN_NAMES = 'รายชื่อ', SIGN_HOLIDAYS = 'วันหยุด', SIGN_TAG = 'ci.signsheet';
-// Google Sheet ไม่มีฟอนต์ TH SarabunIT๙: บนจอใช้ Sarabun แล้วเปลี่ยนเป็น TH SarabunIT๙ ขนาด 18 ตอนส่งออกเป็น Excel
-const SIGN_FONT = 'Sarabun', SIGN_SIZE = 13, EXCEL_FONT = 'TH SarabunIT๙', EXCEL_SIZE = 18;
+// Google Sheet ไม่มีฟอนต์ TH Sarabun New: บนจอใช้ Sarabun แล้วเปลี่ยนเป็น TH Sarabun New ขนาด 16 ตอนส่งออกเป็น Excel
+const SIGN_FONT = 'Sarabun', SIGN_SIZE = 13, EXCEL_FONT = 'TH Sarabun New', EXCEL_SIZE = 16;
 const EXCEL_FOLDER = 'ใบลงชื่อ (Excel)';
 const TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม',
   'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
@@ -820,7 +820,7 @@ function onSignOpen() {
     .addToUi();
 }
 
-/** ส่งออกแท็บใบลงชื่อทั้งหมดเป็นไฟล์ .xlsx ใน Drive (ฟอนต์ TH SarabunIT๙ กระดาษ A4) */
+/** ส่งออกแท็บใบลงชื่อทั้งหมดเป็นไฟล์ .xlsx ใน Drive (ฟอนต์ TH Sarabun New พอดีกระดาษ A4 หนึ่งหน้า) */
 function exportSignExcel() {
   const ss = signBook(), ui = SpreadsheetApp.getUi();
   const tabs = ss.getSheets().filter(isSignTab);
@@ -857,7 +857,7 @@ function buildSignExcel(ss, name) {
   }
 }
 
-// แก้ไฟล์ภายใน .xlsx: ฟอนต์ Sarabun → TH SarabunIT๙ (ขยายขนาดตามสัดส่วน) และตั้งหน้ากระดาษ A4 แนวตั้ง พอดีความกว้าง
+// แก้ไฟล์ภายใน .xlsx: ฟอนต์ Sarabun → TH Sarabun New (ขยายขนาดตามสัดส่วน) และตั้งหน้ากระดาษ A4 แนวตั้ง พอดีหนึ่งหน้า
 function fixExcelPart(blob) {
   const path = blob.getName();
   const isSheet = /^xl\/worksheets\/sheet\d+\.xml$/.test(path);
@@ -871,7 +871,7 @@ function fixExcelPart(blob) {
     });
   } else {
     // ลำดับแท็กใน worksheet ต้องถูกตามมาตรฐาน ไม่งั้น Excel จะขึ้นว่าไฟล์เสีย
-    const setup = '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>';
+    const setup = '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/>';
     xml = xml.replace(/<pageSetup[^>]*\/>/g, '');
     if (/<pageMargins[^>]*\/>/.test(xml)) xml = xml.replace(/(<pageMargins[^>]*\/>)/, '$1' + setup);
     else {
@@ -1151,6 +1151,7 @@ const SIGN_QR_URLS = [
   'https://iamsigarrrsky.github.io/selfie-checkin/qr/qr-2.png'
 ];
 const SIGN_QR_SIZE = 140;
+const SIGN_COL_WIDTHS = [116, 68, 116, 130, 108, 130, 112, 150];   // ความกว้างคอลัมน์ A–H ของใบลงชื่อ (พิกเซล)
 const SIGN_QR_LABELS = ['ระบบเช็คอิน', 'ข้อมูลเช็คอิน'];   // ข้อความเหนือ QR แต่ละอัน
 // ตำแหน่งในช่องลงชื่อผู้ปฏิบัติงาน เมื่อคอลัมน์ "ตำแหน่ง" ในแท็บรายชื่อว่าง
 const SIGN_DEFAULT_POSITION = 'เจ้าหน้าที่วิเคราะห์นโยบายและแผน';
@@ -1161,7 +1162,7 @@ function signQrBlobs() {
   }).filter(Boolean);
 }
 
-// หนึ่งแท็บต่อหนึ่งคน หน้าตาเหมือนใบลงชื่อเดิม (ฟอนต์ TH SarabunIT๙ ตอนเปิดใน Excel)
+// หนึ่งแท็บต่อหนึ่งคน หน้าตาเหมือนใบลงชื่อเดิม (ฟอนต์ TH Sarabun New ตอนเปิดใน Excel)
 function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr, position) {
   const tab = name.replace(/[\[\]*?\/\\:]/g, ' ').slice(0, 99);
   let sh = ss.getSheetByName(tab);
@@ -1181,12 +1182,12 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr
 
   sh.getRange(1, 1, need, 8).setFontFamily(SIGN_FONT).setFontSize(SIGN_SIZE).setVerticalAlignment('middle');
   sh.setRowHeights(1, need, 31);
-  [116, 68, 116, 130, 108, 130, 112, 150].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  SIGN_COL_WIDTHS.forEach((w, i) => sh.setColumnWidth(i + 1, w));
 
-  sh.getRange('A1:H1').merge().setValue('ใบลงชื่อปฏิบัติงาน').setHorizontalAlignment('center');
-  sh.getRange('A2:H2').merge().setValue(head).setHorizontalAlignment('center');
+  sh.getRange('A1:H1').merge().setValue('ใบลงชื่อปฏิบัติงาน').setHorizontalAlignment('center').setFontWeight('bold');
+  sh.getRange('A2:H2').merge().setValue(head).setHorizontalAlignment('center').setFontWeight('bold');
   sh.getRange('A4:H4').setValues([['วันที่', 'ชื่อ-สกุล', '', 'ลงชื่อเข้างาน', 'เวลาเข้างาน', 'ลงชื่อออกงาน', 'เวลาออกงาน', 'หมายเหตุ']])
-    .setHorizontalAlignment('center');
+    .setHorizontalAlignment('center').setFontWeight('bold');
 
   const mm = ('0' + month).slice(-2), rows = [], gray = [];
   const link = (x, text) => x.url ? '=HYPERLINK("' + x.url + '","' + text + '")' : text;
@@ -1207,8 +1208,6 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr
   sh.getRange(4, 2, days + 1, 2).mergeAcross();
   sh.getRange(5, 1, days, 7).setHorizontalAlignment('center');
   sh.getRange(5, 8, days, 1).setHorizontalAlignment('left');
-  sh.getRange(5, 4, days, 1).setFontSize(SIGN_SIZE - 1);
-  sh.getRange(5, 6, days, 1).setFontSize(SIGN_SIZE - 1);
   sh.getRange(4, 1, days + 1, 8).setBorder(true, true, true, true, true, true);
   gray.forEach(d => sh.getRange(4 + d, 1, 1, 8).setBackground('#e8e8e8'));
 
@@ -1216,12 +1215,14 @@ function writeSignTab(ss, name, head, year, month, days, p, holidays, signer, qr
   const selfRow = 6 + days, signerRow = selfRow + self.length + 1;
   self.forEach((line, i) => sh.getRange(selfRow + i, 5, 1, 4).merge().setValue(line).setHorizontalAlignment('center'));
   signer.forEach((line, i) => sh.getRange(signerRow + i, 5, 1, 4).merge().setValue(line).setHorizontalAlignment('center'));
-  // QR วางเรียงกันที่มุมล่างซ้าย ข้างช่องผู้ลงนาม
-  (qr || []).slice(0, 2).forEach((blob, i) => {   // ใบแรกที่คอลัมน์ A ใบที่สองที่คอลัมน์ C
-    sh.insertImage(blob, i ? 3 : 1, signerRow, i ? 10 : 6, 4).setWidth(SIGN_QR_SIZE).setHeight(SIGN_QR_SIZE);
-    // ป้ายชื่อเหนือ QR (แถวว่างก่อนช่องผู้ลงนาม) กว้างเท่ารูป: QR แรกคอลัมน์ A–B, QR ที่สองคอลัมน์ C–D
-    sh.getRange(signerRow - 1, i ? 3 : 1, 1, 2).merge().setValue(SIGN_QR_LABELS[i] || '')
-      .setFontWeight('bold').setFontSize(SIGN_SIZE - 1).setHorizontalAlignment('left').setVerticalAlignment('bottom');
+  // QR วางเรียงกันที่มุมล่างซ้าย ข้างช่องผู้ลงนาม: ใบแรกกลางคอลัมน์ A–B ใบที่สองกลางคอลัมน์ C–D
+  // ป้ายชื่ออยู่แถวว่างเหนือรูป รวมเซลล์ช่วงเดียวกันแล้วจัดกลาง จึงตรงกลางรูปพอดี
+  (qr || []).slice(0, 2).forEach((blob, i) => {
+    const col = i ? 3 : 1, span = SIGN_COL_WIDTHS[col - 1] + SIGN_COL_WIDTHS[col];
+    sh.insertImage(blob, col, signerRow, Math.max(0, Math.round((span - SIGN_QR_SIZE) / 2)), 4)
+      .setWidth(SIGN_QR_SIZE).setHeight(SIGN_QR_SIZE);
+    sh.getRange(signerRow - 1, col, 1, 2).merge().setValue(SIGN_QR_LABELS[i] || '')
+      .setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('bottom');
   });
   return sh;
 }
